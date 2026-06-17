@@ -153,7 +153,7 @@ const fragmentShader = /* glsl */ `
 
   void main() {
     float topness = abs(vNormal.y);
-    vec3 base = vec3(0.015, 0.01, 0.02);
+    vec3 base = vec3(0.04, 0.035, 0.06);
 
     // Face-local UV across the visible side
     vec2 uv;
@@ -168,7 +168,7 @@ const fragmentShader = /* glsl */ `
       // top/bottom: dark with thin emissive grid
       vec2 g = fract(vPos.xz * 0.6);
       float line = step(0.92, g.x) + step(0.92, g.y);
-      gl_FragColor = vec4(base + uColor * line * 0.4, 1.0);
+      gl_FragColor = vec4(base + uColor * line * 0.8, 1.0);
       return;
     }
 
@@ -176,45 +176,46 @@ const fragmentShader = /* glsl */ `
     vec3 col = base;
     float yCursor = 0.0;
     float seedRow = faceSeed * 13.37;
-    for (int i = 0; i < 9; i++) {
+    for (int i = 0; i < 12; i++) {
       float fi = float(i);
-      float bandH = 0.08 + 0.12 * hash1(seedRow + fi * 1.7);
+      float bandH = 0.06 + 0.10 * hash1(seedRow + fi * 1.7);
       float y0 = yCursor;
       float y1 = min(1.0, yCursor + bandH);
       yCursor = y1;
       if (uv.y < y0 || uv.y > y1) continue;
 
-      // Horizontal sub-cells per band (1..3 boards side by side)
-      float subCount = floor(1.0 + hash1(seedRow + fi * 2.3) * 2.99);
+      // Horizontal sub-cells per band (1..4 boards side by side)
+      float subCount = floor(1.0 + hash1(seedRow + fi * 2.3) * 3.99);
       float sx = uv.x * subCount;
       float subId = floor(sx);
       float lx = fract(sx);
       float ly = (uv.y - y0) / max(0.0001, (y1 - y0));
 
       // gap between boards
-      float gap = step(0.02, lx) * step(lx, 0.98) *
-                  step(0.04, ly) * step(ly, 0.96);
+      float gap = step(0.015, lx) * step(lx, 0.985) *
+                  step(0.02, ly) * step(ly, 0.98);
 
       float bSeed = hash(vec2(seedRow + fi, subId));
       vec3 bcol = billboard(vec2(lx, ly), bSeed, uTime);
+      // boost billboard brightness
+      bcol *= 1.4;
       col = mix(col, bcol, gap);
 
-      // thin emissive frame around board
-      float frame = (1.0 - gap) * step(0.005, lx) * step(lx, 0.995) *
-                                    step(0.01, ly) * step(ly, 0.99);
-      col += uColor * frame * 0.6;
+      // emissive neon frame around board
+      float frame = (1.0 - gap) * step(0.003, lx) * step(lx, 0.997) *
+                                    step(0.005, ly) * step(ly, 0.995);
+      col += uColor * frame * 1.2;
     }
 
     // Flicker per band
-    col *= 0.9 + 0.1 * sin(uTime * 6.0 + faceSeed * 30.0 + uv.y * 40.0);
+    col *= 0.85 + 0.15 * sin(uTime * 8.0 + faceSeed * 30.0 + uv.y * 50.0);
 
     // Bottom street glow
-    col += uColor * smoothstep(0.0, 0.08, uv.y) * 0.0; // no-op placeholder
-    col += uColor * smoothstep(0.0, 0.15, 0.15 - uv.y) * 0.5;
+    col += uColor * smoothstep(0.0, 0.15, 0.15 - uv.y) * 0.8;
 
     // Top antenna glow
     if (topness > 0.5) {
-      col = base + uColor * 0.2;
+      col = base + uColor * 0.5;
     }
 
     gl_FragColor = vec4(col, 1.0);

@@ -28,12 +28,14 @@ export function SignClutter({
 
     const rng = mulberry32(7);
     const COLORS: [number, number, number][] = [
-      [1.0, 0.1, 0.23], // red
-      [1.0, 0.0, 0.9],  // magenta
-      [0.0, 0.94, 1.0], // cyan
-      [1.0, 0.9, 0.2],  // yellow
-      [0.4, 1.0, 0.55], // green
-      [1.0, 1.0, 1.0],  // white
+      [1.0, 0.15, 0.35], // red
+      [1.0, 0.1, 1.0],   // magenta
+      [0.2, 1.0, 1.0],   // cyan
+      [1.0, 0.95, 0.3],  // yellow
+      [0.3, 1.0, 0.65],  // green
+      [1.0, 1.0, 1.0],   // white
+      [1.0, 0.5, 0.1],   // orange
+      [0.6, 0.3, 1.0],   // purple
     ];
 
     let vIdx = 0;
@@ -174,24 +176,24 @@ const frag = /* glsl */ `
       // glyph noise
       vec2 sub = fract(uv * cells * vec2(3.0, 5.0));
       float glyph = step(0.4, hash(g * 2.0 + floor(sub * 4.0)));
-      col = vColor * ch * glyph * 1.4;
+      col = vColor * ch * glyph * 2.0;
     } else if (style < 2.0) {
       // Style 1: horizontal scrolling marquee
       float scroll = fract(uv.x - uTime * 0.25 + vOffset);
       vec2 cells = vec2(20.0, 1.0);
       vec2 g = floor(vec2(scroll, uv.y) * cells);
       float c = step(0.4, hash(g + floor(vOffset * 7.0)));
-      col = vColor * c * 1.2;
+      col = vColor * c * 1.8;
     } else if (style < 3.0) {
       // Style 2: solid neon panel with logo block
       float border = step(0.05, uv.x) * step(uv.x, 0.95) *
                      step(0.10, uv.y) * step(uv.y, 0.90);
       float pulse = 0.7 + 0.3 * sin(uTime * 2.0 + vOffset);
-      col = vColor * border * pulse;
+      col = vColor * border * pulse * 1.4;
       // inner glyph
       vec2 g = floor(uv * vec2(6.0, 3.0));
       float sym = step(0.55, hash(g));
-      col += vColor * sym * 0.3;
+      col += vColor * sym * 0.5;
     } else {
       // Style 3: vertical streaming code rain
       vec2 cells = vec2(8.0, 18.0);
@@ -200,11 +202,11 @@ const frag = /* glsl */ `
       float y = fract(uv.y + uTime * (0.4 + lane * 0.8) + vOffset);
       float trail = smoothstep(0.0, 0.5, y) * smoothstep(1.0, 0.5, y);
       float ch = step(0.5, hash(g + floor(uTime * 4.0)));
-      col = vColor * ch * trail * 1.6;
+      col = vColor * ch * trail * 2.2;
     }
 
     // Slight flicker
-    float flick = 0.85 + 0.15 * step(0.05, fract(sin(uTime * 8.0 + vOffset) * 7.0));
+    float flick = 0.8 + 0.2 * step(0.05, fract(sin(uTime * 8.0 + vOffset) * 7.0));
     col *= flick;
 
     if (max(col.r, max(col.g, col.b)) < 0.02) discard;

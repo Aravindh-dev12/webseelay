@@ -62,6 +62,21 @@ function Player({
   const pos = useRef(new THREE.Vector3(0, 0, -55));
   const keys = useKeys();
   const camLook = useRef(new THREE.Vector3(0, 1.2, 0));
+  const camYaw = useRef(0);
+  const camPitch = useRef(0.3);
+
+  useEffect(() => {
+    const onWheel = (e: WheelEvent) => {
+      camYaw.current += e.deltaX * 0.003;
+      camPitch.current = THREE.MathUtils.clamp(
+        camPitch.current + e.deltaY * 0.002,
+        0.05,
+        Math.PI / 2 - 0.1,
+      );
+    };
+    window.addEventListener("wheel", onWheel, { passive: true });
+    return () => window.removeEventListener("wheel", onWheel);
+  }, []);
 
   useFrame((_, delta) => {
     const dt = Math.min(delta, 0.05);
@@ -83,25 +98,20 @@ function Player({
       group.current.rotation.y = yaw.current;
     }
 
-    // Camera: either focus target (when section selected) or follow kitty
+    // Camera: either focus target (when section selected) or orbit around kitty
     const desiredPos = new THREE.Vector3();
     const desiredLook = new THREE.Vector3();
     if (target) {
       desiredPos.copy(target.pos);
       desiredLook.copy(target.look);
     } else {
-      const back = isMobile ? 7 : 5.5;
-      const height = 2.6;
+      const radius = isMobile ? 7 : 5.5;
       desiredPos.set(
-        pos.current.x - Math.sin(yaw.current) * back,
-        pos.current.y + height,
-        pos.current.z - Math.cos(yaw.current) * back,
+        pos.current.x - Math.sin(camYaw.current) * Math.cos(camPitch.current) * radius,
+        pos.current.y + Math.sin(camPitch.current) * radius + 1.2,
+        pos.current.z - Math.cos(camYaw.current) * Math.cos(camPitch.current) * radius,
       );
-      desiredLook.set(
-        pos.current.x + Math.sin(yaw.current) * 6,
-        pos.current.y + 1.4,
-        pos.current.z + Math.cos(yaw.current) * 6,
-      );
+      desiredLook.set(pos.current.x, pos.current.y + 1.2, pos.current.z);
     }
     const lerp = Math.min(1, dt * 4);
     camera.position.lerp(desiredPos, lerp);
@@ -137,28 +147,36 @@ function Ground() {
   );
 }
 
-/** Background skyscraper silhouettes — fills the horizon. */
+/** Background skyline — fills the horizon with emissive, non-black buildings. */
 function BackgroundCity() {
   const towers = useMemo(() => {
     const arr: { p: [number, number, number]; w: number; h: number; d: number }[] = [];
     const rand = mulberry32(42);
-    for (let i = 0; i < 80; i++) {
+    for (let i = 0; i < 90; i++) {
       const ang = rand() * Math.PI * 2;
-      const dist = 60 + rand() * 90;
+      const dist = 60 + rand() * 100;
       const x = Math.cos(ang) * dist;
       const z = Math.sin(ang) * dist;
-      const h = 10 + rand() * 60;
-      const w = 4 + rand() * 8;
+      const h = 10 + rand() * 65;
+      const w = 4 + rand() * 9;
       arr.push({ p: [x, h / 2, z], w, h, d: w });
     }
     return arr;
   }, []);
+
+  const baseMat = useMemo(() => new THREE.MeshStandardMaterial({
+    color: "#080c1e",
+    emissive: "#0d0a18",
+    emissiveIntensity: 0.6,
+    roughness: 0.9,
+    metalness: 0.2,
+  }), []);
+
   return (
     <group>
       {towers.map((t, i) => (
-        <mesh key={i} position={t.p}>
+        <mesh key={i} position={t.p} material={baseMat}>
           <boxGeometry args={[t.w, t.h, t.d]} />
-          <meshBasicMaterial color="#040614" />
         </mesh>
       ))}
     </group>
@@ -222,22 +240,64 @@ function Building({
   const screenH = section.height * 0.55;
   const screenY = y + 1.5;
   const isActive = activeId === section.id;
+  const w = section.width;
+  const d = section.depth;
 
   return (
     <group>
       <NeonTower
         position={[x, y, z]}
-        width={section.width}
-        depth={section.depth}
+        width={w}
+        depth={d}
         height={section.height}
         color={accent}
       />
-      {/* Holo facade screen, offset just in front of the building */}
+      {/* Main front screen */}
       <HoloScreen
         section={section}
-        position={[x, screenY, z + section.depth / 2 + 0.6]}
+        position={[x, screenY, z + d / 2 + 0.6]}
         width={screenW}
         height={screenH}
+        onClick={() => onSelect(section)}
+        active={isActive}
+      />
+      {/* Back screen */}
+      <HoloScreen
+        section={section}
+        position={[x, screenY, z - d / 2 - 0.6]}
+        rotationY={Math.PI}
+        width={screenW * 0.8}
+        height={screenH * 0.8}
+        onClick={() => onSelect(section)}
+        active={isActive}
+      />
+      {/* Left screen */}
+      <HoloScreen
+        section={section}
+        position={[x - w / 2 - 0.6, screenY - 1, z]}
+        rotationY={-Math.PI / 2}
+        width={screenW * 0.7}
+        height={screenH * 0.7}
+        onClick={() => onSelect(section)}
+        active={isActive}
+      />
+      {/* Right screen */}
+      <HoloScreen
+        section={section}
+        position={[x + w / 2 + 0.6, screenY + 0.5, z]}
+        rotationY={Math.PI / 2}
+        width={screenW * 0.65}
+        height={screenH * 0.6}
+        onClick={() => onSelect(section)}
+        active={isActive}
+      />
+      {/* Rooftop billboard */}
+      <HoloScreen
+        section={section}
+        position={[x, section.height + 2.5, z]}
+        rotationY={Math.PI * 0.25}
+        width={screenW * 0.5}
+        height={screenH * 0.35}
         onClick={() => onSelect(section)}
         active={isActive}
       />
@@ -245,8 +305,8 @@ function Building({
       <pointLight
         position={[x, section.height + 2, z]}
         color={accent}
-        intensity={3}
-        distance={30}
+        intensity={4}
+        distance={40}
       />
     </group>
   );

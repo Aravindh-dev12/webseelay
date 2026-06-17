@@ -120,10 +120,10 @@ export const SECTIONS: Section[] = [
 
 export const ACCENTS: Record<Section["accent"], string> = {
   red:     "#ff1a3c",
-  magenta: "#ff1a3c",
-  cyan:    "#ff1a3c",
-  yellow:  "#ff1a3c",
-  green:   "#ff1a3c",
+  magenta: "#ff00e5",
+  cyan:    "#00f0ff",
+  yellow:  "#ffe600",
+  green:   "#00ff88",
 };
 
 // Brand red used in HUD + UI chrome.

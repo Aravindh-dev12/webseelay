@@ -5,13 +5,9 @@ import {
   EffectComposer,
   Bloom,
   Vignette,
-  ChromaticAberration,
-  Noise,
 } from "@react-three/postprocessing";
-import { BlendFunction } from "postprocessing";
 import { NeonTower } from "./NeonTower";
 import { HoloScreen } from "./HoloScreen";
-import { Drones, Particles, EnergyBeam } from "./Effects";
 import { SignClutter } from "./SignClutter";
 import { Kitty } from "./Kitty";
 import { ACCENTS, SECTIONS, BRAND_RED, type Section } from "./data";
@@ -68,11 +64,7 @@ function Player({
   useEffect(() => {
     const onWheel = (e: WheelEvent) => {
       camYaw.current += e.deltaX * 0.003;
-      camPitch.current = THREE.MathUtils.clamp(
-        camPitch.current + e.deltaY * 0.002,
-        0.05,
-        Math.PI / 2 - 0.1,
-      );
+      camPitch.current += e.deltaY * 0.002;
     };
     window.addEventListener("wheel", onWheel, { passive: true });
     return () => window.removeEventListener("wheel", onWheel);
@@ -139,10 +131,6 @@ function Ground() {
           envMapIntensity={0.6}
         />
       </mesh>
-      <gridHelper
-        args={[400, 80, BRAND_RED, "#1a0510"]}
-        position={[0, 0.02, 0]}
-      />
     </>
   );
 }
@@ -164,24 +152,110 @@ function BackgroundCity() {
     return arr;
   }, []);
 
-  const baseMat = useMemo(() => new THREE.MeshStandardMaterial({
-    color: "#080c1e",
-    emissive: "#0d0a18",
-    emissiveIntensity: 0.6,
-    roughness: 0.9,
-    metalness: 0.2,
-  }), []);
-
   return (
     <group>
       {towers.map((t, i) => (
-        <mesh key={i} position={t.p} material={baseMat}>
-          <boxGeometry args={[t.w, t.h, t.d]} />
-        </mesh>
+        <BackgroundTower key={i} position={t.p} width={t.w} height={t.h} depth={t.d} />
       ))}
     </group>
   );
 }
+
+function BackgroundTower({
+  position,
+  width,
+  height,
+  depth,
+}: {
+  position: [number, number, number];
+  width: number;
+  height: number;
+  depth: number;
+}) {
+  const uniforms = useMemo(
+    () => ({
+      uSize: { value: new THREE.Vector3(width, height, depth) },
+    }),
+    [width, height, depth],
+  );
+
+  return (
+    <mesh position={position}>
+      <boxGeometry args={[width, height, depth]} />
+      <shaderMaterial
+        uniforms={uniforms}
+        vertexShader={bgVert}
+        fragmentShader={bgFrag}
+      />
+    </mesh>
+  );
+}
+
+const bgVert = /* glsl */ `
+  varying vec3 vPos;
+  varying vec3 vNormal;
+  void main() {
+    vPos = position;
+    vNormal = normal;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+
+const bgFrag = /* glsl */ `
+  precision highp float;
+  uniform vec3 uSize;
+  varying vec3 vPos;
+  varying vec3 vNormal;
+
+  float hash(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+  }
+
+  void main() {
+    float topness = abs(vNormal.y);
+    // Top/bottom: dark concrete
+    if (topness > 0.5) {
+      gl_FragColor = vec4(vec3(0.06, 0.065, 0.07), 1.0);
+      return;
+    }
+
+    vec2 uv;
+    float faceSeed;
+    if (abs(vNormal.x) > 0.5) {
+      uv = vec2((vPos.z / uSize.z) + 0.5, (vPos.y / uSize.y) + 0.5);
+      faceSeed = sign(vNormal.x) * 0.5 + 0.5;
+    } else {
+      uv = vec2((vPos.x / uSize.x) + 0.5, (vPos.y / uSize.y) + 0.5);
+      faceSeed = sign(vNormal.z) * 0.5 + 0.7;
+    }
+
+    // Building wall color (concrete gray)
+    vec3 wall = vec3(0.10, 0.11, 0.12);
+
+    // Window grid
+    vec2 cells = vec2(4.0, 10.0);
+    vec2 g = floor(uv * cells);
+    vec2 f = fract(uv * cells);
+
+    float frame = step(0.06, f.x) * step(f.x, 0.94) *
+                 step(0.05, f.y) * step(f.y, 0.95);
+
+    float seed = hash(vec2(g.x + faceSeed * 30.0, g.y));
+    float lit = step(0.45, seed);
+
+    // Warm window light
+    vec3 winCol = mix(vec3(0.85, 0.80, 0.65), vec3(0.70, 0.85, 1.0), fract(seed * 5.0));
+    vec3 darkWin = vec3(0.03, 0.035, 0.04);
+
+    vec3 col = wall;
+    col = mix(col, mix(darkWin, winCol, lit), frame);
+
+    // Distance fade slightly darker for atmosphere
+    col *= 0.85;
+
+    gl_FragColor = vec4(col, 1.0);
+  }
+`;
 
 function mulberry32(a: number) {
   return function () {
@@ -192,36 +266,6 @@ function mulberry32(a: number) {
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
-}
-
-function Beams() {
-  // Connect a few key buildings with energy beams.
-  const links: Array<[string, string]> = [
-    ["about", "proj-neurolink"],
-    ["proj-neurolink", "skills"],
-    ["proj-neurolink", "proj-synthwave"],
-    ["proj-oracle", "proj-neurolink"],
-    ["proj-ghostnet", "proj-synthwave"],
-    ["skills", "contact"],
-  ];
-  const map = Object.fromEntries(SECTIONS.map((s) => [s.id, s]));
-  return (
-    <>
-      {links.map(([a, b], i) => {
-        const A = map[a];
-        const B = map[b];
-        if (!A || !B) return null;
-        return (
-          <EnergyBeam
-            key={i}
-            from={[A.position[0], A.height + 1, A.position[1]]}
-            to={[B.position[0], B.height + 1, B.position[1]]}
-            color={ACCENTS[A.accent]}
-          />
-        );
-      })}
-    </>
-  );
 }
 
 function Building({
@@ -258,46 +302,6 @@ function Building({
         position={[x, screenY, z + d / 2 + 0.6]}
         width={screenW}
         height={screenH}
-        onClick={() => onSelect(section)}
-        active={isActive}
-      />
-      {/* Back screen */}
-      <HoloScreen
-        section={section}
-        position={[x, screenY, z - d / 2 - 0.6]}
-        rotationY={Math.PI}
-        width={screenW * 0.8}
-        height={screenH * 0.8}
-        onClick={() => onSelect(section)}
-        active={isActive}
-      />
-      {/* Left screen */}
-      <HoloScreen
-        section={section}
-        position={[x - w / 2 - 0.6, screenY - 1, z]}
-        rotationY={-Math.PI / 2}
-        width={screenW * 0.7}
-        height={screenH * 0.7}
-        onClick={() => onSelect(section)}
-        active={isActive}
-      />
-      {/* Right screen */}
-      <HoloScreen
-        section={section}
-        position={[x + w / 2 + 0.6, screenY + 0.5, z]}
-        rotationY={Math.PI / 2}
-        width={screenW * 0.65}
-        height={screenH * 0.6}
-        onClick={() => onSelect(section)}
-        active={isActive}
-      />
-      {/* Rooftop billboard */}
-      <HoloScreen
-        section={section}
-        position={[x, section.height + 2.5, z]}
-        rotationY={Math.PI * 0.25}
-        width={screenW * 0.5}
-        height={screenH * 0.35}
         onClick={() => onSelect(section)}
         active={isActive}
       />
@@ -338,14 +342,14 @@ export function CityScene({
   return (
     <Canvas
       shadows={false}
-      dpr={isMobile ? 1 : [1, 1.75]}
-      gl={{ antialias: true, powerPreference: "high-performance" }}
+      dpr={Math.min(window.devicePixelRatio, 3)}
+      gl={{ antialias: true, powerPreference: "high-performance", alpha: false }}
       camera={{ position: [0, 3, -60], fov: 68, near: 0.1, far: 800 }}
       onPointerMissed={() => onSelect(null)}
       style={{ position: "fixed", inset: 0 }}
     >
-      <color attach="background" args={["#05010a"]} />
-      <fog attach="fog" args={["#0a0210", 18, 130]} />
+      <color attach="background" args={["#000000"]} />
+      <fog attach="fog" args={["#000000", 18, 130]} />
 
       <ambientLight intensity={0.2} color="#ff2050" />
       <directionalLight position={[40, 60, 20]} intensity={0.45} color={BRAND_RED} />
@@ -364,10 +368,6 @@ export function CityScene({
         />
       ))}
 
-      <Beams />
-      <Drones count={isMobile ? 10 : 28} />
-      <Particles count={isMobile ? 400 : 1400} />
-
       <Player target={target} isMobile={isMobile} />
 
       <EffectComposer multisampling={0} enableNormalPass={false}>
@@ -377,16 +377,7 @@ export function CityScene({
           luminanceSmoothing={0.85}
           mipmapBlur
         />
-        {!isMobile ? (
-          <ChromaticAberration
-            offset={new THREE.Vector2(0.0012, 0.0016)}
-            radialModulation={false}
-            modulationOffset={0}
-            blendFunction={BlendFunction.NORMAL}
-          />
-        ) : <></>}
-        <Noise opacity={0.05} />
-        <Vignette eskil={false} offset={0.12} darkness={0.9} />
+          <Vignette eskil={false} offset={0.12} darkness={0.5} />
       </EffectComposer>
     </Canvas>
   );

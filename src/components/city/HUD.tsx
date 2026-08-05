@@ -7,104 +7,106 @@ function sendControl(code: ControlCode, down: boolean) {
   window.dispatchEvent(new CustomEvent("city-control", { detail: { code, down } }));
 }
 
-const uiFont = '"Arial Narrow", "Roboto Condensed", ui-monospace, monospace';
+const uiFont = '"Arial Narrow", "Roboto Condensed", "Helvetica Neue", Arial, sans-serif';
 
 export function HUD({
   activeId,
   onSelect,
 }: {
   activeId: string | null;
-  onSelect: (s: Section | null) => void;
+  onSelect: (section: Section | null) => void;
 }) {
-  const active = SECTIONS.find((s) => s.id === activeId) ?? null;
+  const active = SECTIONS.find((section) => section.id === activeId) ?? null;
   const fps = useFps();
+  const project = SECTIONS.find((section) => section.kind === "project") ?? null;
+  const about = SECTIONS.find((section) => section.kind === "about") ?? null;
 
   return (
     <>
-      <div style={brandStyle}>
-        <div style={brandMainStyle}>OPZBLUE®</div>
-        <div style={brandYearStyle}>26&apos;</div>
-        <div style={brandSubStyle}>INTERACTIVE DIGITAL WORLD</div>
-      </div>
+      <header style={brandStyle}>
+        <div style={brandLineStyle}>
+          <span style={brandMainStyle}>OPZBLUE</span>
+          <sup style={brandRegStyle}>®</sup>
+          <span style={brandYearStyle}>26&apos;</span>
+        </div>
+        <div style={brandJpStyle}>クリエイティブ・デベロップメント</div>
+        <div style={brandRoleStyle}>CREATIVE DEVELOPMENT<br />&amp; EXPERIENCE DESIGNER</div>
+        <div style={brandRaisedStyle}>RAISED ON &apos;90S CLASSICS</div>
+      </header>
 
-      <nav style={navStyle} aria-label="World navigation">
-        <HudNav label="HOME" active={!active} onClick={() => onSelect(null)} />
-        <HudNav
-          label="WORK"
-          active={active?.kind === "project"}
-          onClick={() => onSelect(SECTIONS.find((s) => s.kind === "project") ?? null)}
-        />
-        <HudNav
-          label="ABOUT"
-          active={active?.kind === "about"}
-          onClick={() => onSelect(SECTIONS.find((s) => s.kind === "about") ?? null)}
-        />
+      <nav style={navStyle} aria-label="Portfolio navigation">
+        <NavButton label="EXPLORE" active={!active} filled onClick={() => onSelect(null)} />
+        <NavButton label="WORKS" active={active?.kind === "project"} onClick={() => onSelect(project)} />
+        <NavButton label="ABOUT" active={active?.kind === "about"} onClick={() => onSelect(about)} />
       </nav>
 
-      <div style={telemetryStyle}>
-        <div>CONNECTED · {Math.max(1, Math.round(fps / 20))}</div>
-        <div>{fps} FPS</div>
+      <div style={telemetryStyle} aria-hidden="true">
+        <div>CONNECTED: {Math.max(1, Math.round(fps / 18))}</div>
+        <div>ENGINE: WEBGL</div>
+        <div>FRAME: {(1000 / Math.max(1, fps)).toFixed(1)} MS · {fps} FPS</div>
       </div>
 
-      <div style={controlsStyle}>
+      <div style={controlWrapStyle}>
         <div style={controlGridStyle}>
           <span />
-          <HoldButton label="↑" code="KeyW" />
+          <HoldButton label="▲" code="KeyW" />
           <span />
-          <HoldButton label="←" code="KeyA" />
-          <HoldButton label="↓" code="KeyS" />
-          <HoldButton label="→" code="KeyD" />
+          <HoldButton label="◀" code="KeyA" />
+          <HoldButton label="▼" code="KeyS" />
+          <HoldButton label="▶" code="KeyD" />
         </div>
-        <div style={controlCaptionStyle}>CONTROL</div>
-        <div style={jumpRowStyle}>
+        <span style={controlLabelStyle}>CONTROL</span>
+        <div style={jumpStyle}>
           <HoldButton label="SPACE" code="Space" wide />
           <span>JUMP</span>
         </div>
       </div>
 
       <button
-        aria-label="Contact"
-        onClick={() => onSelect(SECTIONS.find((s) => s.kind === "contact") ?? null)}
+        aria-label="Open contact"
+        onClick={() => onSelect(SECTIONS.find((section) => section.kind === "contact") ?? null)}
         style={contactStyle}
       >
-        •••
+        <span style={{ transform: "translateY(-2px)", display: "block" }}>•••</span>
       </button>
 
-      {!active && (
-        <div style={hintStyle}>
-          <span style={{ opacity: 0.6 }}>▼</span> WALK TO THE SCREEN <span style={{ opacity: 0.6 }}>▼</span>
+      {active && (
+        <div style={activeRibbonStyle}>
+          <div style={activeKickerStyle}>// {active.kind.toUpperCase()} NODE</div>
+          <div style={activeTitleStyle}>{active.title}</div>
+          <div style={activeSubtitleStyle}>{active.subtitle}</div>
+          <button onClick={() => onSelect(null)} style={activeCloseStyle}>CLOSE ×</button>
         </div>
       )}
 
-      {active && (
-        <aside style={panelStyle}>
-          <button onClick={() => onSelect(null)} style={panelCloseStyle}>×</button>
-          <div style={panelKickerStyle}>// {active.kind.toUpperCase()}</div>
-          <h2 style={panelTitleStyle}>{active.title}</h2>
-          <div style={panelSubtitleStyle}>{active.subtitle}</div>
-          <p style={panelCopyStyle}>{active.description}</p>
-          <div style={tagWrapStyle}>
-            {active.tags.map((tag) => (
-              <span key={tag} style={tagStyle}>{tag}</span>
-            ))}
-          </div>
-        </aside>
-      )}
-
       <div style={scanlineStyle} aria-hidden="true" />
+      <div style={edgeVignetteStyle} aria-hidden="true" />
     </>
   );
 }
 
-function HudNav({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+function NavButton({
+  label,
+  active,
+  filled = false,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  filled?: boolean;
+  onClick: () => void;
+}) {
+  const isFilled = filled && active;
   return (
     <button
       onClick={onClick}
       style={{
         ...navButtonStyle,
-        background: active ? BRAND_RED : "transparent",
-        color: active ? "#120006" : BRAND_RED,
-        boxShadow: active ? `0 0 22px ${BRAND_RED}55` : "none",
+        background: isFilled ? BRAND_RED : "transparent",
+        color: isFilled ? "#140006" : BRAND_RED,
+        opacity: active || filled ? 1 : 0.9,
+        textShadow: isFilled ? "none" : `0 0 12px ${BRAND_RED}44`,
+        boxShadow: isFilled ? `0 0 24px ${BRAND_RED}55` : "none",
       }}
     >
       {label}
@@ -112,18 +114,26 @@ function HudNav({ label, active, onClick }: { label: string; active: boolean; on
   );
 }
 
-function HoldButton({ label, code, wide = false }: { label: string; code: ControlCode; wide?: boolean }) {
+function HoldButton({
+  label,
+  code,
+  wide = false,
+}: {
+  label: string;
+  code: ControlCode;
+  wide?: boolean;
+}) {
   const release = () => sendControl(code, false);
   return (
     <button
-      onPointerDown={(e) => {
-        e.currentTarget.setPointerCapture(e.pointerId);
+      style={{ ...controlButtonStyle, width: wide ? 58 : 25 }}
+      onPointerDown={(event) => {
+        event.currentTarget.setPointerCapture(event.pointerId);
         sendControl(code, true);
       }}
       onPointerUp={release}
       onPointerCancel={release}
-      onPointerLeave={(e) => e.buttons && release()}
-      style={{ ...controlButtonStyle, width: wide ? 58 : 27 }}
+      onPointerLeave={(event) => event.buttons && release()}
     >
       {label}
     </button>
@@ -134,13 +144,14 @@ function useFps() {
   const [fps, setFps] = useState(60);
   const frames = useRef(0);
   const last = useRef(0);
+
   useEffect(() => {
     last.current = performance.now();
     let raf = 0;
     const tick = () => {
       frames.current += 1;
       const now = performance.now();
-      if (now - last.current > 500) {
+      if (now - last.current >= 500) {
         setFps(Math.round((frames.current * 1000) / (now - last.current)));
         frames.current = 0;
         last.current = now;
@@ -150,29 +161,123 @@ function useFps() {
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, []);
+
   return fps;
 }
 
-const brandStyle: React.CSSProperties = { position: "fixed", left: 22, top: 18, zIndex: 40, color: BRAND_RED, fontFamily: uiFont, pointerEvents: "none" };
-const brandMainStyle: React.CSSProperties = { fontSize: "clamp(32px,4.5vw,60px)", lineHeight: 0.86, letterSpacing: -3, fontWeight: 950, textShadow: `0 0 20px ${BRAND_RED}44` };
-const brandYearStyle: React.CSSProperties = { position: "absolute", left: "100%", top: 1, marginLeft: 8, fontSize: 20, fontWeight: 900 };
-const brandSubStyle: React.CSSProperties = { marginTop: 12, fontSize: 8, letterSpacing: 2.6, fontWeight: 800, opacity: 0.75 };
-const navStyle: React.CSSProperties = { position: "fixed", top: 20, left: "50%", transform: "translateX(-50%)", zIndex: 42, display: "flex", gap: 24, alignItems: "center", fontFamily: uiFont };
-const navButtonStyle: React.CSSProperties = { border: 0, borderRadius: 999, padding: "10px 18px", fontSize: 10, fontWeight: 950, letterSpacing: 1.2, cursor: "pointer", fontFamily: uiFont };
-const telemetryStyle: React.CSSProperties = { position: "fixed", top: 20, right: 22, zIndex: 40, color: BRAND_RED, fontFamily: uiFont, fontSize: 8, letterSpacing: 1.6, lineHeight: 1.55, textAlign: "right", opacity: 0.8, pointerEvents: "none" };
-const controlsStyle: React.CSSProperties = { position: "fixed", left: 22, bottom: 48, zIndex: 43, color: BRAND_RED, fontFamily: uiFont, userSelect: "none", touchAction: "none" };
-const controlGridStyle: React.CSSProperties = { display: "grid", gridTemplateColumns: "repeat(3,27px)", gap: 4 };
-const controlButtonStyle: React.CSSProperties = { height: 27, border: 0, background: BRAND_RED, color: "#120006", fontWeight: 950, fontSize: 9, cursor: "pointer", boxShadow: `0 0 16px ${BRAND_RED}44`, touchAction: "none" };
-const controlCaptionStyle: React.CSSProperties = { margin: "7px 0 0 27px", fontSize: 8, fontWeight: 950, letterSpacing: 1.8 };
-const jumpRowStyle: React.CSSProperties = { marginTop: 13, display: "flex", alignItems: "center", gap: 9, fontSize: 8, fontWeight: 950, letterSpacing: 1.2 };
-const contactStyle: React.CSSProperties = { position: "fixed", right: 22, bottom: 48, zIndex: 43, width: 48, height: 48, borderRadius: "50%", border: 0, background: BRAND_RED, color: "#120006", fontWeight: 950, fontSize: 16, letterSpacing: 2, boxShadow: `0 0 28px ${BRAND_RED}55`, cursor: "pointer" };
-const hintStyle: React.CSSProperties = { position: "fixed", left: "50%", bottom: 52, transform: "translateX(-50%)", zIndex: 38, color: BRAND_RED, fontFamily: uiFont, fontSize: 8, letterSpacing: 3.2, fontWeight: 900, pointerEvents: "none", textShadow: `0 0 12px ${BRAND_RED}55` };
-const panelStyle: React.CSSProperties = { position: "fixed", right: 22, top: "50%", transform: "translateY(-50%)", zIndex: 44, width: "min(330px,78vw)", padding: 20, background: "rgba(8,2,6,.72)", border: `1px solid ${BRAND_RED}66`, backdropFilter: "blur(14px)", boxShadow: `0 0 34px ${BRAND_RED}22`, color: "#ffe8ec", fontFamily: uiFont };
-const panelCloseStyle: React.CSSProperties = { position: "absolute", right: 12, top: 10, border: 0, background: "transparent", color: BRAND_RED, fontSize: 22, cursor: "pointer" };
-const panelKickerStyle: React.CSSProperties = { fontSize: 8, letterSpacing: 2.5, color: BRAND_RED, opacity: 0.7 };
-const panelTitleStyle: React.CSSProperties = { margin: "10px 0 0", fontSize: 25, lineHeight: 1, color: BRAND_RED, letterSpacing: -1 };
-const panelSubtitleStyle: React.CSSProperties = { marginTop: 7, fontSize: 9, letterSpacing: 1.8, opacity: 0.75 };
-const panelCopyStyle: React.CSSProperties = { marginTop: 14, fontSize: 12, lineHeight: 1.55, opacity: 0.86 };
-const tagWrapStyle: React.CSSProperties = { display: "flex", gap: 6, flexWrap: "wrap", marginTop: 14 };
-const tagStyle: React.CSSProperties = { border: `1px solid ${BRAND_RED}44`, padding: "4px 7px", fontSize: 8, letterSpacing: 1.3, color: BRAND_RED };
-const scanlineStyle: React.CSSProperties = { position: "fixed", inset: 0, zIndex: 15, pointerEvents: "none", opacity: 0.12, backgroundImage: "repeating-linear-gradient(0deg,rgba(255,20,65,.08) 0,rgba(255,20,65,.08) 1px,transparent 1px,transparent 4px)" };
+const brandStyle: React.CSSProperties = {
+  position: "fixed",
+  left: 28,
+  top: 30,
+  zIndex: 50,
+  color: BRAND_RED,
+  fontFamily: uiFont,
+  pointerEvents: "none",
+  textTransform: "uppercase",
+};
+const brandLineStyle: React.CSSProperties = { display: "flex", alignItems: "flex-start", lineHeight: 0.86 };
+const brandMainStyle: React.CSSProperties = { fontSize: "clamp(34px,4.2vw,58px)", fontWeight: 950, letterSpacing: -3.4 };
+const brandRegStyle: React.CSSProperties = { fontSize: 9, marginLeft: 3, marginTop: 0 };
+const brandYearStyle: React.CSSProperties = { fontSize: "clamp(18px,2vw,28px)", fontWeight: 950, marginLeft: 7, marginTop: -1, letterSpacing: -1.5 };
+const brandJpStyle: React.CSSProperties = { marginTop: 11, fontSize: 7, letterSpacing: 1.7, opacity: 0.82 };
+const brandRoleStyle: React.CSSProperties = { marginTop: 6, fontSize: 8, letterSpacing: 0.2, lineHeight: 1.13, fontWeight: 900 };
+const brandRaisedStyle: React.CSSProperties = { marginTop: 3, fontSize: 7, letterSpacing: 0.3, fontWeight: 900 };
+const navStyle: React.CSSProperties = {
+  position: "fixed",
+  left: "50%",
+  top: 34,
+  transform: "translateX(-50%)",
+  display: "flex",
+  gap: "clamp(24px,5vw,72px)",
+  alignItems: "center",
+  zIndex: 51,
+  fontFamily: uiFont,
+};
+const navButtonStyle: React.CSSProperties = {
+  border: 0,
+  borderRadius: 999,
+  padding: "9px 19px",
+  background: "transparent",
+  cursor: "pointer",
+  fontFamily: uiFont,
+  fontSize: 9,
+  fontWeight: 950,
+  letterSpacing: 0.15,
+};
+const telemetryStyle: React.CSSProperties = {
+  position: "fixed",
+  right: 25,
+  top: 31,
+  zIndex: 50,
+  color: BRAND_RED,
+  fontFamily: uiFont,
+  fontSize: 7,
+  lineHeight: 1.5,
+  textAlign: "right",
+  letterSpacing: 0.7,
+  opacity: 0.85,
+  pointerEvents: "none",
+};
+const controlWrapStyle: React.CSSProperties = {
+  position: "fixed",
+  left: 28,
+  top: 170,
+  zIndex: 52,
+  color: BRAND_RED,
+  fontFamily: uiFont,
+  userSelect: "none",
+  touchAction: "none",
+};
+const controlGridStyle: React.CSSProperties = { display: "grid", gridTemplateColumns: "repeat(3,25px)", gap: 3 };
+const controlButtonStyle: React.CSSProperties = {
+  height: 25,
+  padding: 0,
+  border: 0,
+  background: BRAND_RED,
+  color: "#120006",
+  fontFamily: uiFont,
+  fontWeight: 950,
+  fontSize: 8,
+  cursor: "pointer",
+  boxShadow: `0 0 15px ${BRAND_RED}33`,
+  touchAction: "none",
+};
+const controlLabelStyle: React.CSSProperties = { position: "absolute", left: 88, top: 34, fontSize: 7, letterSpacing: 0.8, fontWeight: 950 };
+const jumpStyle: React.CSSProperties = { marginTop: 24, display: "flex", alignItems: "center", gap: 15, fontSize: 7, fontWeight: 950, letterSpacing: 0.7 };
+const contactStyle: React.CSSProperties = {
+  position: "fixed",
+  right: 23,
+  bottom: 24,
+  zIndex: 52,
+  width: 42,
+  height: 42,
+  borderRadius: "50%",
+  border: 0,
+  background: BRAND_RED,
+  color: "#120006",
+  boxShadow: `0 0 28px ${BRAND_RED}55`,
+  cursor: "pointer",
+  fontSize: 14,
+  fontWeight: 950,
+};
+const activeRibbonStyle: React.CSSProperties = {
+  position: "fixed",
+  left: "50%",
+  bottom: 18,
+  transform: "translateX(-50%)",
+  zIndex: 53,
+  minWidth: "min(540px,72vw)",
+  padding: "10px 42px 10px 14px",
+  border: `1px solid ${BRAND_RED}55`,
+  background: "rgba(5,1,5,.68)",
+  backdropFilter: "blur(10px)",
+  color: BRAND_RED,
+  fontFamily: uiFont,
+  boxShadow: `0 0 28px ${BRAND_RED}1f`,
+};
+const activeKickerStyle: React.CSSProperties = { fontSize: 7, letterSpacing: 1.4, opacity: 0.65 };
+const activeTitleStyle: React.CSSProperties = { marginTop: 3, fontSize: 15, fontWeight: 950, letterSpacing: -0.3 };
+const activeSubtitleStyle: React.CSSProperties = { marginTop: 1, fontSize: 7, letterSpacing: 0.9, opacity: 0.75 };
+const activeCloseStyle: React.CSSProperties = { position: "absolute", right: 10, top: 10, border: 0, background: "transparent", color: BRAND_RED, cursor: "pointer", fontFamily: uiFont, fontSize: 7, fontWeight: 900 };
+const scanlineStyle: React.CSSProperties = { position: "fixed", inset: 0, zIndex: 14, pointerEvents: "none", opacity: 0.14, mixBlendMode: "screen", backgroundImage: "repeating-linear-gradient(0deg,rgba(255,20,65,.07) 0,rgba(255,20,65,.07) 1px,transparent 1px,transparent 4px)" };
+const edgeVignetteStyle: React.CSSProperties = { position: "fixed", inset: 0, zIndex: 13, pointerEvents: "none", background: "radial-gradient(circle at 52% 47%, transparent 48%, rgba(0,0,0,.18) 72%, rgba(0,0,0,.64) 115%)" };

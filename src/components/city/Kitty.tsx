@@ -1,47 +1,69 @@
 import * as THREE from "three";
 import { forwardRef } from "react";
 
-/** Low-poly dark kitty avatar with glowing red eyes. */
-export const Kitty = forwardRef<THREE.Group>(function Kitty(_props, ref) {
-  const body = "#0a0509";
-  const eye = "#ff1a3c";
+type KittyProps = {
+  color?: string;
+  eyeColor?: string;
+  scale?: number;
+};
+
+/**
+ * Rounded neon mascot used by the player and plaza NPCs.
+ * The component keeps the historical Kitty export so the rest of the scene API stays stable.
+ */
+export const Kitty = forwardRef<THREE.Group, KittyProps>(function Kitty(
+  { color = "#ff0038", eyeColor = "#ffffff", scale = 1 },
+  ref,
+) {
+  const dark = new THREE.Color(color).multiplyScalar(0.42).getStyle();
+
   return (
-    <group ref={ref}>
-      {/* body */}
-      <mesh position={[0, 0.55, 0]} castShadow>
-        <capsuleGeometry args={[0.42, 0.55, 6, 12]} />
-        <meshStandardMaterial color={body} roughness={0.65} metalness={0.2} />
+    <group ref={ref} scale={scale}>
+      {/* soft ghost body */}
+      <mesh position={[0, 0.72, 0]} castShadow>
+        <capsuleGeometry args={[0.48, 0.72, 10, 22]} />
+        <meshStandardMaterial
+          color={color}
+          emissive={color}
+          emissiveIntensity={0.42}
+          roughness={0.44}
+          metalness={0.08}
+        />
       </mesh>
-      {/* head */}
-      <mesh position={[0, 1.25, 0.18]}>
-        <sphereGeometry args={[0.42, 18, 16]} />
-        <meshStandardMaterial color={body} roughness={0.6} metalness={0.25} />
+
+      {/* flattened face visor */}
+      <mesh position={[0, 1.05, 0.47]} scale={[1.18, 0.66, 0.35]}>
+        <sphereGeometry args={[0.33, 24, 18]} />
+        <meshStandardMaterial color={dark} roughness={0.32} metalness={0.24} />
       </mesh>
-      {/* ears */}
-      <mesh position={[-0.26, 1.65, 0.16]} rotation={[0, 0, -0.35]}>
-        <coneGeometry args={[0.14, 0.34, 4]} />
-        <meshStandardMaterial color={body} roughness={0.7} />
+
+      {/* glowing eyes */}
+      <mesh position={[-0.14, 1.1, 0.595]}>
+        <sphereGeometry args={[0.055, 14, 12]} />
+        <meshBasicMaterial color={eyeColor} toneMapped={false} />
       </mesh>
-      <mesh position={[0.26, 1.65, 0.16]} rotation={[0, 0, 0.35]}>
-        <coneGeometry args={[0.14, 0.34, 4]} />
-        <meshStandardMaterial color={body} roughness={0.7} />
+      <mesh position={[0.14, 1.1, 0.595]}>
+        <sphereGeometry args={[0.055, 14, 12]} />
+        <meshBasicMaterial color={eyeColor} toneMapped={false} />
       </mesh>
-      {/* eyes (emissive) */}
-      <mesh position={[-0.14, 1.28, 0.55]}>
-        <sphereGeometry args={[0.07, 12, 10]} />
-        <meshStandardMaterial color={eye} emissive={eye} emissiveIntensity={4} toneMapped={false} />
+
+      {/* tiny smile */}
+      <mesh position={[0, 0.94, 0.603]} rotation={[0, 0, Math.PI / 2]}>
+        <torusGeometry args={[0.095, 0.018, 8, 18, Math.PI]} />
+        <meshBasicMaterial color={eyeColor} toneMapped={false} />
       </mesh>
-      <mesh position={[0.14, 1.28, 0.55]}>
-        <sphereGeometry args={[0.07, 12, 10]} />
-        <meshStandardMaterial color={eye} emissive={eye} emissiveIntensity={4} toneMapped={false} />
+
+      {/* short floating feet */}
+      <mesh position={[-0.22, 0.1, 0.02]} scale={[1, 0.65, 1]}>
+        <sphereGeometry args={[0.16, 12, 10]} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.2} />
       </mesh>
-      {/* tail */}
-      <mesh position={[0, 0.7, -0.45]} rotation={[0.7, 0, 0]}>
-        <capsuleGeometry args={[0.07, 0.55, 4, 8]} />
-        <meshStandardMaterial color={body} roughness={0.7} />
+      <mesh position={[0.22, 0.1, 0.02]} scale={[1, 0.65, 1]}>
+        <sphereGeometry args={[0.16, 12, 10]} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.2} />
       </mesh>
-      {/* eye glow point light */}
-      <pointLight position={[0, 1.28, 0.55]} color={eye} intensity={1.2} distance={4} />
+
+      <pointLight position={[0, 1.02, 0.45]} color={color} intensity={2.1} distance={5.5} />
     </group>
   );
 });

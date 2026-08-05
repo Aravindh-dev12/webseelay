@@ -1,14 +1,9 @@
 import * as THREE from "three";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
-import { Html, Text } from "@react-three/drei";
+import { Text } from "@react-three/drei";
 import { type Section, ACCENTS } from "./data";
 
-/**
- * Holographic video screen attached to the front of a building.
- * Plays a looping reel as a video texture; if the video errors,
- * falls back to an animated shader.
- */
 export function HoloScreen({
   section,
   position,
@@ -27,63 +22,49 @@ export function HoloScreen({
   active: boolean;
 }) {
   const [videoOk, setVideoOk] = useState(false);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
   const accent = ACCENTS[section.accent];
+  const groupRef = useRef<THREE.Group>(null);
+  const shaderRef = useRef<THREE.ShaderMaterial>(null);
 
-  // Build the <video> element once
   const video = useMemo(() => {
     if (typeof document === "undefined") return null;
-    const v = document.createElement("video");
-    v.src = section.videoUrl;
-    v.loop = true;
-    v.muted = true;
-    v.playsInline = true;
-    v.crossOrigin = "anonymous";
-    v.autoplay = true;
-    return v;
+    const element = document.createElement("video");
+    element.src = section.videoUrl;
+    element.loop = true;
+    element.muted = true;
+    element.playsInline = true;
+    element.crossOrigin = "anonymous";
+    element.autoplay = true;
+    return element;
   }, [section.videoUrl]);
 
   useEffect(() => {
     if (!video) return;
-    videoRef.current = video;
-    const onCanPlay = () => {
+    const canPlay = () => {
       setVideoOk(true);
-      video.play().catch(() => {});
+      video.play().catch(() => undefined);
     };
-    const onError = () => setVideoOk(false);
-    video.addEventListener("canplay", onCanPlay);
-    video.addEventListener("error", onError);
+    const failed = () => setVideoOk(false);
+    video.addEventListener("canplay", canPlay);
+    video.addEventListener("error", failed);
     video.load();
     return () => {
-      video.removeEventListener("canplay", onCanPlay);
-      video.removeEventListener("error", onError);
+      video.removeEventListener("canplay", canPlay);
+      video.removeEventListener("error", failed);
       video.pause();
     };
   }, [video]);
 
-  const videoTexture = useMemo(() => {
+  const texture = useMemo(() => {
     if (!video) return null;
-    const t = new THREE.VideoTexture(video);
-    t.colorSpace = THREE.SRGBColorSpace;
-    t.minFilter = THREE.LinearFilter;
-    t.magFilter = THREE.LinearFilter;
-    return t;
+    const value = new THREE.VideoTexture(video);
+    value.colorSpace = THREE.SRGBColorSpace;
+    value.minFilter = THREE.LinearFilter;
+    value.magFilter = THREE.LinearFilter;
+    return value;
   }, [video]);
 
-  const shaderRef = useRef<THREE.ShaderMaterial>(null!);
-  const frameRef = useRef<THREE.Mesh>(null!);
-  const groupRef = useRef<THREE.Group>(null!);
-
-  useFrame((state) => {
-    const t = state.clock.elapsedTime;
-    if (shaderRef.current) shaderRef.current.uniforms.uTime.value = t;
-    if (groupRef.current) {
-      groupRef.current.position.y =
-        position[1] + Math.sin(t * 0.6 + position[0]) * 0.08;
-    }
-  });
-
-  const shaderUniforms = useMemo(
+  const uniforms = useMemo(
     () => ({
       uTime: { value: 0 },
       uColor: { value: new THREE.Color(accent) },
@@ -91,90 +72,79 @@ export function HoloScreen({
     [accent],
   );
 
+  useFrame((state) => {
+    if (shaderRef.current) shaderRef.current.uniforms.uTime.value = state.clock.elapsedTime;
+    if (groupRef.current) {
+      groupRef.current.rotation.z = Math.sin(state.clock.elapsedTime * 0.45 + position[0]) * 0.0015;
+    }
+  });
+
   return (
     <group ref={groupRef} position={position} rotation={[0, rotationY, 0]}>
-      {/* Outer neon frame */}
-      <mesh ref={frameRef}>
-        <boxGeometry args={[width + 0.6, height + 0.6, 0.15]} />
-        <meshBasicMaterial color={accent} toneMapped={false} />
+      <mesh position={[0, 0, -0.14]}>
+        <boxGeometry args={[width + 0.55, height + 0.55, 0.22]} />
+        <meshStandardMaterial color="#050508" metalness={0.72} roughness={0.26} />
       </mesh>
 
-      {/* Screen */}
       <mesh
-        position={[0, 0, 0.12]}
-        onPointerOver={(e) => {
-          e.stopPropagation();
+        position={[0, 0, 0.02]}
+        onPointerOver={(event) => {
+          event.stopPropagation();
           document.body.style.cursor = "pointer";
         }}
         onPointerOut={() => (document.body.style.cursor = "")}
-        onClick={(e) => {
-          e.stopPropagation();
+        onClick={(event) => {
+          event.stopPropagation();
           onClick();
         }}
       >
         <planeGeometry args={[width, height]} />
-        {videoOk && videoTexture ? (
-          <meshBasicMaterial map={videoTexture} toneMapped={false} />
+        {videoOk && texture ? (
+          <meshBasicMaterial map={texture} toneMapped={false} />
         ) : (
           <shaderMaterial
             ref={shaderRef}
-            uniforms={shaderUniforms}
+            uniforms={uniforms}
             vertexShader={screenVert}
             fragmentShader={screenFrag}
           />
         )}
       </mesh>
 
-      {/* Title bar across top of screen */}
+      <mesh position={[0, height / 2 + 0.18, 0.08]}>
+        <planeGeometry args={[width, 0.055]} />
+        <meshBasicMaterial color={accent} toneMapped={false} />
+      </mesh>
+      <mesh position={[0, -height / 2 - 0.18, 0.08]}>
+        <planeGeometry args={[width, 0.055]} />
+        <meshBasicMaterial color={accent} toneMapped={false} />
+      </mesh>
+
       <Text
-        position={[-width / 2 + 0.4, height / 2 - 0.5, 0.25]}
+        position={[-width / 2 + 0.18, height / 2 + 0.44, 0.06]}
+        fontSize={0.28}
+        letterSpacing={0.13}
+        color={accent}
         anchorX="left"
         anchorY="middle"
-        fontSize={0.55}
-        color={accent}
-        outlineWidth={0.01}
-        outlineColor="#000"
       >
         {section.title}
       </Text>
       <Text
-        position={[width / 2 - 0.4, -height / 2 + 0.4, 0.25]}
+        position={[width / 2 - 0.12, -height / 2 - 0.43, 0.06]}
+        fontSize={0.16}
+        letterSpacing={0.1}
+        color="#d6f9ff"
         anchorX="right"
         anchorY="middle"
-        fontSize={0.32}
-        color="#9ef3ff"
       >
-        &gt; CLICK TO ENTER
+        {active ? "NODE OPEN" : "INTERACT"}
       </Text>
 
-      {/* Floating UI tag above */}
-      <Html
-        position={[0, height / 2 + 1.2, 0]}
-        center
-        distanceFactor={18}
-        zIndexRange={[10, 0]}
-        pointerEvents="none"
-      >
-        <div
-          className="cy-panel cy-flicker"
-          style={{
-            padding: "6px 12px",
-            color: accent,
-            fontSize: 11,
-            letterSpacing: 2,
-            whiteSpace: "nowrap",
-            borderColor: `${accent}66`,
-            boxShadow: `0 0 16px ${accent}55`,
-          }}
-        >
-          ● {section.subtitle.toUpperCase()}
-        </div>
-      </Html>
-
       {active && (
-        <mesh position={[0, 0, -0.05]}>
-          <planeGeometry args={[width + 4, height + 4]} />
-          <meshBasicMaterial color={accent} transparent opacity={0.06} />
+        <mesh position={[0, 0, -0.2]}>
+          <planeGeometry args={[width + 0.9, height + 0.9]} />
+          <meshBasicMaterial color={accent} transparent opacity={0.055} toneMapped={false} />
         </mesh>
       )}
     </group>
@@ -194,22 +164,22 @@ const screenFrag = /* glsl */ `
   uniform float uTime;
   uniform vec3 uColor;
   varying vec2 vUv;
-  float hash(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
+
+  float hash(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+  }
+
   void main() {
     vec2 uv = vUv;
-    // scanlines
-    float s = 0.5 + 0.5 * sin(uv.y * 400.0 + uTime * 6.0);
-    // moving grid
-    vec2 g = fract(uv * vec2(20.0, 30.0) + vec2(uTime*0.1, -uTime*0.2));
-    float grid = step(0.92, max(g.x, g.y));
-    // noise blocks
-    float n = hash(floor(uv * 40.0 + floor(uTime*3.0)));
-    vec3 col = uColor * (0.25 + 0.5 * s);
-    col += uColor * grid * 0.8;
-    col += vec3(n) * 0.08;
-    // vignette
-    float v = smoothstep(1.2, 0.3, length(uv - 0.5));
-    col *= v;
-    gl_FragColor = vec4(col, 1.0);
+    vec2 gridUv = fract(uv * vec2(16.0, 10.0) + vec2(uTime * 0.02, 0.0));
+    float grid = step(0.965, max(gridUv.x, gridUv.y));
+    float scan = 0.5 + 0.5 * sin(uv.y * 520.0 + uTime * 3.0);
+    float noise = hash(floor(uv * 70.0 + floor(uTime * 2.0)));
+    float vignette = smoothstep(0.86, 0.24, length(uv - 0.5));
+    vec3 base = mix(vec3(0.015, 0.02, 0.025), uColor * 0.17, uv.y);
+    base += uColor * grid * 0.46;
+    base += uColor * scan * 0.05;
+    base += vec3(noise) * 0.025;
+    gl_FragColor = vec4(base * vignette, 1.0);
   }
 `;

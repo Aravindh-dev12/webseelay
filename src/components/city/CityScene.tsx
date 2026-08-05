@@ -3,11 +3,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { MeshReflectorMaterial, Text } from "@react-three/drei";
 import { EffectComposer, Bloom, Vignette } from "@react-three/postprocessing";
-import { NeonTower } from "./NeonTower";
 import { HoloScreen } from "./HoloScreen";
-import { SignClutter } from "./SignClutter";
 import { Kitty } from "./Kitty";
-import { ACCENTS, SECTIONS, BRAND_RED, type Section } from "./data";
+import { SECTIONS, BRAND_RED, type Section } from "./data";
 
 type ControlDetail = { code: string; down: boolean };
 
@@ -25,23 +23,18 @@ function useIsMobile() {
 
 function useKeys() {
   const keys = useRef<Record<string, boolean>>({});
-
   useEffect(() => {
-    const down = (event: KeyboardEvent) => {
-      keys.current[event.code] = true;
-      if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(event.code)) {
-        event.preventDefault();
-      }
+    const down = (e: KeyboardEvent) => {
+      keys.current[e.code] = true;
+      if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(e.code)) e.preventDefault();
     };
-    const up = (event: KeyboardEvent) => {
-      keys.current[event.code] = false;
+    const up = (e: KeyboardEvent) => {
+      keys.current[e.code] = false;
     };
-    const external = (event: Event) => {
-      const detail = (event as CustomEvent<ControlDetail>).detail;
-      if (!detail) return;
-      keys.current[detail.code] = detail.down;
+    const external = (e: Event) => {
+      const detail = (e as CustomEvent<ControlDetail>).detail;
+      if (detail) keys.current[detail.code] = detail.down;
     };
-
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
     window.addEventListener("city-control", external);
@@ -51,444 +44,239 @@ function useKeys() {
       window.removeEventListener("city-control", external);
     };
   }, []);
-
   return keys;
 }
 
-function Player({
-  target,
-  isMobile,
-}: {
-  target: { pos: THREE.Vector3; look: THREE.Vector3 } | null;
-  isMobile: boolean;
-}) {
+function Player({ target, isMobile }: { target: { pos: THREE.Vector3; look: THREE.Vector3 } | null; isMobile: boolean }) {
   const { camera } = useThree();
-  const group = useRef<THREE.Group>(null);
-  const yaw = useRef(0);
-  const velocityY = useRef(0);
-  const position = useRef(new THREE.Vector3(0, 0, -54));
   const keys = useKeys();
-  const cameraLook = useRef(new THREE.Vector3(0, 1.2, 0));
+  const root = useRef<THREE.Group>(null);
+  const pos = useRef(new THREE.Vector3(0, 0, 11));
+  const yaw = useRef(Math.PI);
+  const velY = useRef(0);
+  const look = useRef(new THREE.Vector3(0, 1, 0));
 
   useFrame((state, delta) => {
     const dt = Math.min(delta, 0.05);
-    const pressed = keys.current;
-    const forward =
-      (pressed.KeyW || pressed.ArrowUp ? 1 : 0) -
-      (pressed.KeyS || pressed.ArrowDown ? 1 : 0);
-    const turn =
-      (pressed.KeyA || pressed.ArrowLeft ? 1 : 0) -
-      (pressed.KeyD || pressed.ArrowRight ? 1 : 0);
+    const k = keys.current;
+    const forward = (k.KeyW || k.ArrowUp ? 1 : 0) - (k.KeyS || k.ArrowDown ? 1 : 0);
+    const turn = (k.KeyA || k.ArrowLeft ? 1 : 0) - (k.KeyD || k.ArrowRight ? 1 : 0);
+    yaw.current += turn * dt * 2.25;
+    const speed = (k.ShiftLeft || k.ShiftRight ? 8.5 : 5.4) * forward;
+    pos.current.x += Math.sin(yaw.current) * speed * dt;
+    pos.current.z += Math.cos(yaw.current) * speed * dt;
 
-    yaw.current += turn * dt * 2.35;
-    const speed = (pressed.ShiftLeft || pressed.ShiftRight ? 14 : 8.5) * forward;
-    position.current.x += Math.sin(yaw.current) * speed * dt;
-    position.current.z += Math.cos(yaw.current) * speed * dt;
+    if (k.Space && pos.current.y <= 0.001) velY.current = 4.6;
+    velY.current -= 13 * dt;
+    pos.current.y = Math.max(0, pos.current.y + velY.current * dt);
+    if (pos.current.y === 0) velY.current = 0;
 
-    if (pressed.Space && position.current.y <= 0.001) velocityY.current = 5.8;
-    velocityY.current -= 14 * dt;
-    position.current.y = Math.max(0, position.current.y + velocityY.current * dt);
-    if (position.current.y === 0) velocityY.current = 0;
+    pos.current.x = THREE.MathUtils.clamp(pos.current.x, -14, 14);
+    pos.current.z = THREE.MathUtils.clamp(pos.current.z, -4, 20);
 
-    position.current.x = THREE.MathUtils.clamp(position.current.x, -38, 38);
-    position.current.z = THREE.MathUtils.clamp(position.current.z, -70, 96);
-
-    if (group.current) {
-      group.current.position.copy(position.current);
-      group.current.rotation.y = yaw.current;
+    if (root.current) {
+      root.current.position.copy(pos.current);
+      root.current.rotation.y = yaw.current;
     }
 
-    const desiredPosition = new THREE.Vector3();
+    const desired = new THREE.Vector3();
     const desiredLook = new THREE.Vector3();
-
     if (target) {
-      desiredPosition.copy(target.pos);
+      desired.copy(target.pos);
       desiredLook.copy(target.look);
     } else {
-      const pointerYaw = state.pointer.x * (isMobile ? 0.04 : 0.15);
-      const pointerPitch = state.pointer.y * (isMobile ? 0.02 : 0.08);
-      const cameraYaw = yaw.current + pointerYaw;
-      const radius = isMobile ? 7.6 : 6.2;
-      const height = isMobile ? 3.7 : 3.25;
-
-      desiredPosition.set(
-        position.current.x - Math.sin(cameraYaw) * radius,
-        position.current.y + height - pointerPitch,
-        position.current.z - Math.cos(cameraYaw) * radius,
+      const orbit = state.pointer.x * (isMobile ? 0.02 : 0.08);
+      const r = isMobile ? 5.4 : 4.5;
+      const camYaw = yaw.current + orbit;
+      desired.set(
+        pos.current.x - Math.sin(camYaw) * r,
+        pos.current.y + (isMobile ? 2.7 : 2.35),
+        pos.current.z - Math.cos(camYaw) * r,
       );
-      desiredLook.set(
-        position.current.x + Math.sin(yaw.current) * 2.2,
-        position.current.y + 1.25,
-        position.current.z + Math.cos(yaw.current) * 2.2,
-      );
+      desiredLook.set(pos.current.x, pos.current.y + 0.9, pos.current.z - 2.8);
     }
-
-    const lerp = Math.min(1, dt * 4.6);
-    camera.position.lerp(desiredPosition, lerp);
-    cameraLook.current.lerp(desiredLook, lerp);
-    camera.lookAt(cameraLook.current);
+    camera.position.lerp(desired, Math.min(1, dt * 4.8));
+    look.current.lerp(desiredLook, Math.min(1, dt * 5));
+    camera.lookAt(look.current);
   });
 
   return (
-    <group ref={group}>
-      <Kitty />
-      <pointLight position={[0, 0.35, -0.25]} color={BRAND_RED} intensity={1.6} distance={6} />
+    <group ref={root}>
+      <Kitty color="#ff0038" scale={0.92} />
     </group>
   );
 }
 
-function Ground({ isMobile }: { isMobile: boolean }) {
+function Floor({ isMobile }: { isMobile: boolean }) {
   return (
-    <>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.045, 20]}>
-        <planeGeometry args={[260, 280]} />
-        <MeshReflectorMaterial
-          blur={isMobile ? [90, 25] : [260, 80]}
-          resolution={isMobile ? 256 : 768}
-          mixBlur={1}
-          mixStrength={isMobile ? 16 : 32}
-          roughness={0.34}
-          depthScale={1.1}
-          minDepthThreshold={0.28}
-          maxDepthThreshold={1.25}
-          color="#09070b"
-          metalness={0.88}
-          mirror={0.52}
-        />
-      </mesh>
-      <StreetGuides />
-    </>
-  );
-}
-
-function StreetGuides() {
-  const zPositions = useMemo(() => Array.from({ length: 17 }, (_, i) => -58 + i * 9), []);
-  return (
-    <group position={[0, 0.018, 0]}>
-      {zPositions.map((z, index) => (
-        <group key={z}>
-          <mesh position={[-5.5, 0, z]} rotation={[-Math.PI / 2, 0, 0]}>
-            <planeGeometry args={[0.055, 5.2]} />
-            <meshBasicMaterial
-              color={index % 3 === 0 ? "#ff1647" : "#35101d"}
-              transparent
-              opacity={index % 3 === 0 ? 0.9 : 0.42}
-              toneMapped={false}
-            />
-          </mesh>
-          <mesh position={[5.5, 0, z]} rotation={[-Math.PI / 2, 0, 0]}>
-            <planeGeometry args={[0.055, 5.2]} />
-            <meshBasicMaterial
-              color={index % 4 === 0 ? "#00d6ff" : "#151428"}
-              transparent
-              opacity={index % 4 === 0 ? 0.7 : 0.38}
-              toneMapped={false}
-            />
-          </mesh>
-        </group>
-      ))}
-    </group>
-  );
-}
-
-function BackgroundCity() {
-  const towers = useMemo(() => {
-    const items: { p: [number, number, number]; w: number; h: number; d: number }[] = [];
-    const random = mulberry32(42);
-    for (let i = 0; i < 90; i++) {
-      const angle = random() * Math.PI * 2;
-      const distance = 58 + random() * 105;
-      const x = Math.cos(angle) * distance;
-      const z = Math.sin(angle) * distance + 16;
-      const h = 10 + random() * 66;
-      const w = 4 + random() * 9;
-      items.push({ p: [x, h / 2, z], w, h, d: w });
-    }
-    return items;
-  }, []);
-
-  return (
-    <group>
-      {towers.map((tower, index) => (
-        <BackgroundTower
-          key={index}
-          position={tower.p}
-          width={tower.w}
-          height={tower.h}
-          depth={tower.d}
-        />
-      ))}
-    </group>
-  );
-}
-
-function BackgroundTower({
-  position,
-  width,
-  height,
-  depth,
-}: {
-  position: [number, number, number];
-  width: number;
-  height: number;
-  depth: number;
-}) {
-  const uniforms = useMemo(
-    () => ({ uSize: { value: new THREE.Vector3(width, height, depth) } }),
-    [width, height, depth],
-  );
-
-  return (
-    <mesh position={position}>
-      <boxGeometry args={[width, height, depth]} />
-      <shaderMaterial uniforms={uniforms} vertexShader={bgVert} fragmentShader={bgFrag} />
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.04, 5]}>
+      <planeGeometry args={[90, 90]} />
+      <MeshReflectorMaterial
+        blur={isMobile ? [70, 18] : [220, 60]}
+        resolution={isMobile ? 256 : 768}
+        mixBlur={1}
+        mixStrength={isMobile ? 12 : 28}
+        roughness={0.22}
+        depthScale={1.2}
+        minDepthThreshold={0.2}
+        maxDepthThreshold={1.3}
+        color="#060307"
+        metalness={0.94}
+        mirror={0.78}
+      />
     </mesh>
   );
 }
 
-function HeroPlaza({
-  activeId,
-  onSelect,
-  isMobile,
-}: {
-  activeId: string | null;
-  onSelect: (section: Section) => void;
-  isMobile: boolean;
-}) {
-  const featured = SECTIONS.find((section) => section.kind === "project") ?? SECTIONS[0];
-  const width = isMobile ? 14.5 : 20;
-  const height = isMobile ? 7.2 : 9.2;
+function Plaza({ onSelect, activeId, isMobile }: { onSelect: (s: Section) => void; activeId: string | null; isMobile: boolean }) {
+  const featured = SECTIONS.find((s) => s.kind === "project") ?? SECTIONS[0];
+  const width = isMobile ? 12.8 : 18.5;
+  const height = isMobile ? 6.4 : 9.4;
+
+  const ghosts = useMemo(
+    () => [
+      [-6.5, 0, -0.8, "#ff0038", 0.8],
+      [6.2, 0, 0.4, "#175cff", 0.82],
+      [-8.2, 0, 4.7, "#ff0038", 0.64],
+      [8.1, 0, 5.2, "#175cff", 0.64],
+      [-3.6, 0, 4.9, "#175cff", 0.58],
+      [3.5, 0, 5.5, "#ff0038", 0.6],
+    ] as Array<[number, number, number, string, number]>,
+    [],
+  );
 
   return (
-    <group position={[0, 0, -13]}>
-      <mesh position={[0, 0.18, 0]}>
-        <boxGeometry args={[width + 5, 0.35, 6]} />
-        <meshStandardMaterial color="#0b070d" metalness={0.75} roughness={0.26} />
+    <group position={[0, 0, -10]}>
+      <mesh position={[0, 5.9, -0.9]}>
+        <boxGeometry args={[width + 2.4, 12.6, 0.7]} />
+        <meshStandardMaterial color="#070306" roughness={0.28} metalness={0.8} />
       </mesh>
-      <mesh position={[0, 5.8, -0.85]}>
-        <boxGeometry args={[width + 1.5, 12.8, 0.48]} />
-        <meshStandardMaterial color="#08070a" metalness={0.8} roughness={0.3} />
+      <mesh position={[0, 0.18, 0.9]}>
+        <boxGeometry args={[width + 7.2, 0.35, 9.5]} />
+        <meshStandardMaterial color="#090509" roughness={0.18} metalness={0.86} />
       </mesh>
+
       <HoloScreen
         section={featured}
-        position={[0, 6.6, 0]}
+        position={[0, 6.4, 0]}
         width={width}
         height={height}
         onClick={() => onSelect(featured)}
         active={activeId === featured.id}
       />
-      <Text
-        position={[0, 12.6, 0.2]}
-        fontSize={0.58}
-        letterSpacing={0.28}
-        color={BRAND_RED}
-        anchorX="center"
-        anchorY="middle"
-      >
-        MAIN PROJECT ARRAY
+
+      <Text position={[0, 12.25, 0.18]} fontSize={0.48} letterSpacing={0.38} color={BRAND_RED}>
+        DIGITAL EXPERIENCE / 2026
       </Text>
-      <Text
-        position={[0, 1.05, 2.72]}
-        rotation={[-Math.PI / 2, 0, 0]}
-        fontSize={0.46}
-        letterSpacing={0.42}
-        color="#ff3159"
-        anchorX="center"
-        anchorY="middle"
-      >
-        APPROACH // INTERACT // ENTER
+
+      <Text position={[0, 0.23, 4.4]} rotation={[-Math.PI / 2, 0, 0]} fontSize={0.36} letterSpacing={0.3} color="#ff1747">
+        MOVE CLOSER · INTERACT WITH THE SCREEN
       </Text>
-      {[-1, 1].map((side) => (
-        <group key={side} position={[side * (width / 2 + 1.8), 1.15, 1.5]}>
-          <mesh>
-            <cylinderGeometry args={[0.16, 0.2, 2.3, 12]} />
-            <meshStandardMaterial
-              color="#19060d"
-              emissive={BRAND_RED}
-              emissiveIntensity={2.4}
-              toneMapped={false}
-            />
-          </mesh>
-          <pointLight color={BRAND_RED} intensity={3} distance={8} />
+
+      {ghosts.map(([x, y, z, color, scale], i) => (
+        <group key={i} position={[x, y, z]} rotation={[0, i % 2 ? -0.45 : 0.45, 0]}>
+          <Kitty color={color} scale={scale} />
         </group>
+      ))}
+
+      <NeonMonolith position={[-10.6, 2.1, 0.2]} color="#ff0038" label="01" />
+      <NeonMonolith position={[10.6, 2.1, 0.7]} color="#175cff" label="02" />
+      <NeonMonolith position={[-11.5, 1.6, 6.7]} color="#175cff" label="LIVE" />
+      <NeonMonolith position={[11.5, 1.6, 6.7]} color="#ff0038" label="PLAY" />
+    </group>
+  );
+}
+
+function NeonMonolith({ position, color, label }: { position: [number, number, number]; color: string; label: string }) {
+  return (
+    <group position={position}>
+      <mesh>
+        <boxGeometry args={[2.2, 4.2, 0.42]} />
+        <meshStandardMaterial color="#080408" emissive={color} emissiveIntensity={0.55} roughness={0.3} metalness={0.76} />
+      </mesh>
+      <mesh position={[0, 0, 0.24]}>
+        <planeGeometry args={[1.8, 3.7]} />
+        <meshBasicMaterial color={color} transparent opacity={0.11} toneMapped={false} />
+      </mesh>
+      <Text position={[0, 0, 0.28]} fontSize={0.42} color={color} letterSpacing={0.16}>
+        {label}
+      </Text>
+      <pointLight color={color} intensity={2.5} distance={7} />
+    </group>
+  );
+}
+
+function Backdrop() {
+  const blocks = useMemo(() => {
+    const a: Array<[number, number, number, number, number, string]> = [];
+    const r = mulberry32(7);
+    for (let i = 0; i < 34; i++) {
+      const x = (r() - 0.5) * 64;
+      const z = -25 - r() * 30;
+      const h = 5 + r() * 16;
+      const w = 2 + r() * 5;
+      const c = i % 3 === 0 ? "#ff0038" : i % 5 === 0 ? "#175cff" : "#0b0710";
+      a.push([x, h / 2, z, w, h, c]);
+    }
+    return a;
+  }, []);
+  return (
+    <group>
+      {blocks.map(([x, y, z, w, h, c], i) => (
+        <mesh key={i} position={[x, y, z]}>
+          <boxGeometry args={[w, h, w]} />
+          <meshStandardMaterial color="#09050a" emissive={c} emissiveIntensity={c === "#0b0710" ? 0.06 : 0.28} roughness={0.7} />
+        </mesh>
       ))}
     </group>
   );
 }
 
-function Building({
-  section,
-  activeId,
-  onSelect,
-}: {
-  section: Section;
-  activeId: string | null;
-  onSelect: (section: Section) => void;
-}) {
-  const accent = ACCENTS[section.accent];
-  const [x, z] = section.position;
-  const y = section.height / 2;
-  const screenWidth = Math.min(section.width * 1.4, 13);
-  const screenHeight = section.height * 0.55;
-  const screenY = y + 1.5;
-  const active = activeId === section.id;
-
-  return (
-    <group>
-      <NeonTower
-        position={[x, y, z]}
-        width={section.width}
-        depth={section.depth}
-        height={section.height}
-        color={accent}
-      />
-      <HoloScreen
-        section={section}
-        position={[x, screenY, z + section.depth / 2 + 0.6]}
-        width={screenWidth}
-        height={screenHeight}
-        onClick={() => onSelect(section)}
-        active={active}
-      />
-      <pointLight
-        position={[x, section.height + 2, z]}
-        color={accent}
-        intensity={3.4}
-        distance={36}
-      />
-    </group>
-  );
+function mulberry32(a: number) {
+  return function () {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }
 
-export function CityScene({
-  activeId,
-  onSelect,
-}: {
-  activeId: string | null;
-  onSelect: (section: Section | null) => void;
-}) {
+export function CityScene({ activeId, onSelect }: { activeId: string | null; onSelect: (s: Section | null) => void }) {
   const isMobile = useIsMobile();
-
   const target = useMemo(() => {
     if (!activeId) return null;
-    const section = SECTIONS.find((item) => item.id === activeId);
-    if (!section) return null;
-    const [x, z] = section.position;
-    const side = x >= 0 ? -1 : 1;
-    const offset = isMobile ? 14 : 10;
     return {
-      pos: new THREE.Vector3(x + side * offset, section.height * 0.35, z - 4),
-      look: new THREE.Vector3(x, section.height * 0.55, z),
+      pos: new THREE.Vector3(isMobile ? 6.5 : 8.2, 4.4, -2.5),
+      look: new THREE.Vector3(0, 5.8, -10),
     };
   }, [activeId, isMobile]);
 
   return (
     <Canvas
-      shadows={false}
-      dpr={Math.min(window.devicePixelRatio, isMobile ? 1.6 : 2.2)}
+      dpr={Math.min(window.devicePixelRatio, isMobile ? 1.5 : 2)}
       gl={{ antialias: true, powerPreference: "high-performance", alpha: false }}
-      camera={{ position: [0, 3.3, -61], fov: isMobile ? 72 : 64, near: 0.1, far: 800 }}
+      camera={{ position: [0, 2.5, 16], fov: isMobile ? 70 : 58, near: 0.1, far: 220 }}
       onPointerMissed={() => onSelect(null)}
       style={{ position: "fixed", inset: 0 }}
     >
       <color attach="background" args={["#020104"]} />
-      <fog attach="fog" args={["#060108", 19, 124]} />
+      <fog attach="fog" args={["#030105", 22, 88]} />
+      <ambientLight intensity={0.16} color="#ff0038" />
+      <hemisphereLight args={["#290518", "#020104", 0.3]} />
+      <directionalLight position={[14, 26, 10]} intensity={0.34} color="#ff1747" />
+      <directionalLight position={[-16, 22, 3]} intensity={0.2} color="#175cff" />
 
-      <ambientLight intensity={0.17} color="#ff1a3c" />
-      <hemisphereLight args={["#4c1435", "#030105", 0.24]} />
-      <directionalLight position={[35, 60, 18]} intensity={0.35} color={BRAND_RED} />
-      <directionalLight position={[-38, 46, -20]} intensity={0.3} color="#5c30ff" />
-
-      <Ground isMobile={isMobile} />
-      <BackgroundCity />
-      <SignClutter count={isMobile ? 42 : 95} />
-      <HeroPlaza activeId={activeId} onSelect={onSelect} isMobile={isMobile} />
-
-      {SECTIONS.map((section) => (
-        <Building
-          key={section.id}
-          section={section}
-          activeId={activeId}
-          onSelect={onSelect}
-        />
-      ))}
-
+      <Floor isMobile={isMobile} />
+      <Backdrop />
+      <Plaza onSelect={onSelect} activeId={activeId} isMobile={isMobile} />
       <Player target={target} isMobile={isMobile} />
 
       <EffectComposer multisampling={0} enableNormalPass={false}>
-        <Bloom
-          intensity={isMobile ? 0.82 : 1.15}
-          luminanceThreshold={0.14}
-          luminanceSmoothing={0.9}
-          mipmapBlur
-        />
-        <Vignette eskil={false} offset={0.08} darkness={0.6} />
+        <Bloom intensity={isMobile ? 0.8 : 1.2} luminanceThreshold={0.12} luminanceSmoothing={0.9} mipmapBlur />
+        <Vignette eskil={false} offset={0.1} darkness={0.72} />
       </EffectComposer>
     </Canvas>
   );
-}
-
-const bgVert = /* glsl */ `
-  varying vec3 vPos;
-  varying vec3 vNormal;
-  void main() {
-    vPos = position;
-    vNormal = normal;
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-  }
-`;
-
-const bgFrag = /* glsl */ `
-  precision highp float;
-  uniform vec3 uSize;
-  varying vec3 vPos;
-  varying vec3 vNormal;
-
-  float hash(vec2 p) {
-    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
-  }
-
-  void main() {
-    float topness = abs(vNormal.y);
-    if (topness > 0.5) {
-      gl_FragColor = vec4(vec3(0.035, 0.03, 0.04), 1.0);
-      return;
-    }
-
-    vec2 uv;
-    float faceSeed;
-    if (abs(vNormal.x) > 0.5) {
-      uv = vec2((vPos.z / uSize.z) + 0.5, (vPos.y / uSize.y) + 0.5);
-      faceSeed = sign(vNormal.x) * 0.5 + 0.5;
-    } else {
-      uv = vec2((vPos.x / uSize.x) + 0.5, (vPos.y / uSize.y) + 0.5);
-      faceSeed = sign(vNormal.z) * 0.5 + 0.7;
-    }
-
-    vec3 wall = vec3(0.055, 0.048, 0.06);
-    vec2 cells = vec2(4.0, 10.0);
-    vec2 g = floor(uv * cells);
-    vec2 f = fract(uv * cells);
-    float frame = step(0.08, f.x) * step(f.x, 0.92) * step(0.07, f.y) * step(f.y, 0.93);
-    float seed = hash(vec2(g.x + faceSeed * 30.0, g.y));
-    float lit = step(0.62, seed);
-    vec3 winA = vec3(0.88, 0.12, 0.34);
-    vec3 winB = vec3(0.18, 0.62, 0.95);
-    vec3 winCol = mix(winA, winB, fract(seed * 5.0));
-    vec3 darkWin = vec3(0.018, 0.016, 0.024);
-    vec3 col = mix(wall, mix(darkWin, winCol, lit), frame);
-    col *= 0.72;
-    gl_FragColor = vec4(col, 1.0);
-  }
-`;
-
-function mulberry32(seed: number) {
-  return function () {
-    seed |= 0;
-    seed = (seed + 0x6d2b79f5) | 0;
-    let value = seed;
-    value = Math.imul(value ^ (value >>> 15), value | 1);
-    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
-    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
-  };
 }

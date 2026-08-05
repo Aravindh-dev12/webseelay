@@ -6,9 +6,9 @@ import { type Section, ACCENTS } from "./data";
 
 /**
  * Mixed DOM/WebGL video billboard.
- * The actual media is rendered with a browser <video> inside drei Html, avoiding
- * cross-origin WebGL VideoTexture failures. A WebGL backing plate remains in the
- * scene so bloom and the reflective floor still pick up screen glow.
+ * The DOM video is intentionally pointer-transparent so the R3F canvas keeps
+ * receiving cursor movement for camera orbit. Clicks are handled by the WebGL
+ * plane directly behind the DOM media.
  */
 export function HoloScreen({
   section,
@@ -42,9 +42,11 @@ export function HoloScreen({
       position[1] + Math.sin(state.clock.elapsedTime * 0.48 + position[0]) * 0.035;
   });
 
-  const px = 72;
-  const videoWidth = Math.max(220, Math.round(width * px));
-  const videoHeight = Math.max(130, Math.round(height * px));
+  // Larger CSS-to-world mapping keeps the browser video filling the physical
+  // billboard instead of looking like a small inset panel.
+  const px = 112;
+  const videoWidth = Math.max(300, Math.round(width * px));
+  const videoHeight = Math.max(180, Math.round(height * px));
 
   return (
     <group ref={groupRef} position={position} rotation={[0, rotationY, 0]}>
@@ -53,7 +55,13 @@ export function HoloScreen({
         <meshStandardMaterial color="#040507" metalness={0.78} roughness={0.23} />
       </mesh>
 
-      <mesh position={[0, 0, -0.015]}>
+      <mesh
+        position={[0, 0, -0.015]}
+        onClick={(event) => {
+          event.stopPropagation();
+          onClick();
+        }}
+      >
         <planeGeometry args={[width, height]} />
         <meshStandardMaterial
           color="#0a0c10"
@@ -74,31 +82,23 @@ export function HoloScreen({
           width: `${videoWidth}px`,
           height: `${videoHeight}px`,
           overflow: "hidden",
-          pointerEvents: "auto",
+          pointerEvents: "none",
           background: "#050508",
           boxShadow: active
             ? `0 0 34px ${accent}88, inset 0 0 0 1px ${accent}88`
             : `0 0 18px ${accent}44, inset 0 0 0 1px ${accent}55`,
         }}
       >
-        <button
-          type="button"
-          aria-label={`Open ${section.title}`}
-          onClick={(event) => {
-            event.stopPropagation();
-            onClick();
-          }}
+        <div
+          aria-hidden="true"
           style={{
             position: "relative",
             width: "100%",
             height: "100%",
             display: "block",
-            border: 0,
-            padding: 0,
-            margin: 0,
             background: "#050508",
-            cursor: "pointer",
             overflow: "hidden",
+            pointerEvents: "none",
           }}
         >
           <video
@@ -118,21 +118,21 @@ export function HoloScreen({
               display: "block",
               objectFit: "cover",
               background: "#050508",
-              filter: "saturate(1.15) contrast(1.08) brightness(.84)",
+              filter: "saturate(1.15) contrast(1.08) brightness(.86)",
+              pointerEvents: "none",
             }}
           />
           <span
-            aria-hidden="true"
             style={{
               position: "absolute",
               inset: 0,
               pointerEvents: "none",
               background:
-                "linear-gradient(180deg,rgba(0,0,0,.05),transparent 45%,rgba(0,0,0,.22)), repeating-linear-gradient(0deg,rgba(255,255,255,.025) 0 1px,transparent 1px 4px)",
+                "linear-gradient(180deg,rgba(0,0,0,.04),transparent 45%,rgba(0,0,0,.2)), repeating-linear-gradient(0deg,rgba(255,255,255,.025) 0 1px,transparent 1px 4px)",
               mixBlendMode: "screen",
             }}
           />
-        </button>
+        </div>
       </Html>
 
       <mesh position={[0, height / 2 + 0.09, 0.08]}>

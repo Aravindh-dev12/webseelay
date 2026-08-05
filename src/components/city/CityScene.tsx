@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { MeshReflectorMaterial, Text } from "@react-three/drei";
 import { EffectComposer, Bloom, Vignette } from "@react-three/postprocessing";
@@ -8,18 +8,22 @@ import { Kitty } from "./Kitty";
 import { SECTIONS, BRAND_RED, type Section } from "./data";
 
 type ControlDetail = { code: string; down: boolean };
+type Face = "front" | "left" | "right";
 
-type BuildingSpec = {
-  id: string;
-  side: "left" | "right";
-  z: number;
-  width: number;
-  depth: number;
-  height: number;
+type MediaFace = {
+  face: Face;
   sectionIndex: number;
-  frontSectionIndex: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+type PlazaBlockSpec = {
+  id: string;
+  position: [number, number];
+  size: [number, number, number];
   accent: string;
-  x?: number;
+  faces: MediaFace[];
 };
 
 function useIsMobile() {
@@ -65,12 +69,12 @@ function useKeys() {
 function Player({ isMobile }: { isMobile: boolean }) {
   const { camera } = useThree();
   const root = useRef<THREE.Group>(null);
-  const pos = useRef(new THREE.Vector3(0, 0, 20));
-  const yaw = useRef(Math.PI);
-  const velocityY = useRef(0);
-  const cameraLook = useRef(new THREE.Vector3(0, 1.25, 8));
+  const position = useRef(new THREE.Vector3(0, 0, 9.2));
+  const bodyYaw = useRef(Math.PI);
+  const verticalVelocity = useRef(0);
   const orbitYaw = useRef(0);
   const orbitPitch = useRef(0);
+  const look = useRef(new THREE.Vector3(0, 1.35, 0));
   const keys = useKeys();
 
   useFrame((state, delta) => {
@@ -79,51 +83,48 @@ function Player({ isMobile }: { isMobile: boolean }) {
     const forward = (k.KeyW || k.ArrowUp ? 1 : 0) - (k.KeyS || k.ArrowDown ? 1 : 0);
     const turn = (k.KeyA || k.ArrowLeft ? 1 : 0) - (k.KeyD || k.ArrowRight ? 1 : 0);
 
-    yaw.current += turn * dt * 1.9;
-    const speed = (k.ShiftLeft || k.ShiftRight ? 9.4 : 5.8) * forward;
-    pos.current.x += Math.sin(yaw.current) * speed * dt;
-    pos.current.z += Math.cos(yaw.current) * speed * dt;
+    bodyYaw.current += turn * dt * 1.9;
+    const speed = (k.ShiftLeft || k.ShiftRight ? 7.8 : 4.8) * forward;
+    position.current.x += Math.sin(bodyYaw.current) * speed * dt;
+    position.current.z += Math.cos(bodyYaw.current) * speed * dt;
 
-    if (k.Space && pos.current.y <= 0.001) velocityY.current = 4.5;
-    velocityY.current -= 13 * dt;
-    pos.current.y = Math.max(0, pos.current.y + velocityY.current * dt);
-    if (pos.current.y === 0) velocityY.current = 0;
+    if (k.Space && position.current.y <= 0.001) verticalVelocity.current = 4.45;
+    verticalVelocity.current -= 13 * dt;
+    position.current.y = Math.max(0, position.current.y + verticalVelocity.current * dt);
+    if (position.current.y === 0) verticalVelocity.current = 0;
 
-    pos.current.x = THREE.MathUtils.clamp(pos.current.x, -4.9, 4.9);
-    pos.current.z = THREE.MathUtils.clamp(pos.current.z, -78, 24);
+    position.current.x = THREE.MathUtils.clamp(position.current.x, -10.8, 10.8);
+    position.current.z = THREE.MathUtils.clamp(position.current.z, -8.0, 14.0);
 
     if (root.current) {
-      root.current.position.copy(pos.current);
-      root.current.rotation.y = yaw.current;
+      root.current.position.copy(position.current);
+      root.current.rotation.y = bodyYaw.current;
     }
 
-    const targetOrbitYaw = isMobile ? 0 : state.pointer.x * 1.08;
-    const targetOrbitPitch = isMobile ? 0 : state.pointer.y * 0.58;
-    const orbitLerp = 1 - Math.exp(-dt * 7.2);
-    orbitYaw.current = THREE.MathUtils.lerp(orbitYaw.current, targetOrbitYaw, orbitLerp);
-    orbitPitch.current = THREE.MathUtils.lerp(orbitPitch.current, targetOrbitPitch, orbitLerp);
+    const targetYaw = isMobile ? 0 : state.pointer.x * 1.18;
+    const targetPitch = isMobile ? 0 : state.pointer.y * 0.62;
+    const orbitBlend = 1 - Math.exp(-dt * 7.5);
+    orbitYaw.current = THREE.MathUtils.lerp(orbitYaw.current, targetYaw, orbitBlend);
+    orbitPitch.current = THREE.MathUtils.lerp(orbitPitch.current, targetPitch, orbitBlend);
 
-    const radius = isMobile ? 6.2 : 7.2;
-    const cameraYaw = yaw.current + orbitYaw.current;
-    const horizontalRadius = Math.cos(orbitPitch.current * 0.72) * radius;
-    const baseHeight = isMobile ? 2.75 : 3.0;
-
+    const cameraYaw = bodyYaw.current + orbitYaw.current;
+    const radius = isMobile ? 5.9 : 6.7;
+    const horizontalRadius = Math.cos(orbitPitch.current * 0.68) * radius;
     const desired = new THREE.Vector3(
-      pos.current.x - Math.sin(cameraYaw) * horizontalRadius,
-      pos.current.y + baseHeight + orbitPitch.current * 4.1,
-      pos.current.z - Math.cos(cameraYaw) * horizontalRadius,
+      position.current.x - Math.sin(cameraYaw) * horizontalRadius,
+      position.current.y + (isMobile ? 2.65 : 2.9) + orbitPitch.current * 4.0,
+      position.current.z - Math.cos(cameraYaw) * horizontalRadius,
     );
-
     const desiredLook = new THREE.Vector3(
-      pos.current.x + Math.sin(cameraYaw) * 5.4,
-      pos.current.y + 1.3 + orbitPitch.current * 5.2,
-      pos.current.z + Math.cos(cameraYaw) * 5.4,
+      position.current.x + Math.sin(cameraYaw) * 4.7,
+      position.current.y + 1.25 + orbitPitch.current * 5.0,
+      position.current.z + Math.cos(cameraYaw) * 4.7,
     );
 
-    const cameraLerp = 1 - Math.exp(-dt * 8.5);
-    camera.position.lerp(desired, cameraLerp);
-    cameraLook.current.lerp(desiredLook, cameraLerp);
-    camera.lookAt(cameraLook.current);
+    const cameraBlend = 1 - Math.exp(-dt * 8.2);
+    camera.position.lerp(desired, cameraBlend);
+    look.current.lerp(desiredLook, cameraBlend);
+    camera.lookAt(look.current);
   });
 
   return (
@@ -133,180 +134,291 @@ function Player({ isMobile }: { isMobile: boolean }) {
   );
 }
 
-function Ground({ isMobile }: { isMobile: boolean }) {
+function PlazaFloor({ isMobile }: { isMobile: boolean }) {
   return (
-    <>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.05, -28]}>
-        <planeGeometry args={[58, 148]} />
-        <MeshReflectorMaterial
-          blur={isMobile ? [70, 18] : [320, 100]}
-          resolution={isMobile ? 256 : 768}
-          mixBlur={1}
-          mixStrength={isMobile ? 20 : 44}
-          mirror={0.8}
-          roughness={0.19}
-          depthScale={1.3}
-          minDepthThreshold={0.12}
-          maxDepthThreshold={1.3}
-          color="#030305"
-          metalness={0.97}
-        />
-      </mesh>
-      <StreetTrim />
-    </>
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.05, -1.5]}>
+      <planeGeometry args={[52, 48]} />
+      <MeshReflectorMaterial
+        blur={isMobile ? [64, 18] : [280, 82]}
+        resolution={isMobile ? 256 : 768}
+        mixBlur={1}
+        mixStrength={isMobile ? 19 : 38}
+        mirror={0.78}
+        roughness={0.22}
+        depthScale={1.18}
+        minDepthThreshold={0.14}
+        maxDepthThreshold={1.2}
+        color="#030305"
+        metalness={0.96}
+      />
+    </mesh>
   );
 }
 
-function StreetTrim() {
-  return (
-    <group position={[0, 0.015, -28]}>
-      {[-5.45, 5.45].map((x) => (
-        <mesh key={x} position={[x, 0, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-          <planeGeometry args={[0.05, 146]} />
-          <meshBasicMaterial color={BRAND_RED} transparent opacity={0.34} toneMapped={false} />
-        </mesh>
-      ))}
-      {Array.from({ length: 19 }).map((_, i) => (
-        <mesh key={i} position={[0, 0, 50 - i * 8]} rotation={[-Math.PI / 2, 0, 0]}>
-          <planeGeometry args={[0.055, 3.3]} />
-          <meshBasicMaterial color={i % 3 === 0 ? "#6e37ff" : "#391020"} transparent opacity={0.48} toneMapped={false} />
-        </mesh>
-      ))}
-    </group>
-  );
-}
-
-const BUILDINGS: BuildingSpec[] = [
-  { id: "L1", side: "left", z: 12, width: 8.6, depth: 14, height: 22, sectionIndex: 1, frontSectionIndex: 4, accent: "#ff1747", x: -9.8 },
-  { id: "R1", side: "right", z: 9, width: 8.2, depth: 15, height: 26, sectionIndex: 2, frontSectionIndex: 3, accent: "#00dfff", x: 9.8 },
-  { id: "L2", side: "left", z: -5, width: 9.2, depth: 16, height: 31, sectionIndex: 3, frontSectionIndex: 5, accent: "#9f4dff", x: -10.0 },
-  { id: "R2", side: "right", z: -8, width: 8.7, depth: 16, height: 24, sectionIndex: 4, frontSectionIndex: 6, accent: "#ff2ecb", x: 10.1 },
-  { id: "L3", side: "left", z: -24, width: 8.8, depth: 17, height: 28, sectionIndex: 5, frontSectionIndex: 2, accent: "#ffe45c", x: -9.9 },
-  { id: "R3", side: "right", z: -27, width: 9.5, depth: 18, height: 35, sectionIndex: 6, frontSectionIndex: 1, accent: "#73ff91", x: 10.2 },
-  { id: "L4", side: "left", z: -44, width: 9.4, depth: 17, height: 36, sectionIndex: 2, frontSectionIndex: 3, accent: "#00e5ff", x: -10.1 },
-  { id: "R4", side: "right", z: -48, width: 8.9, depth: 17, height: 30, sectionIndex: 1, frontSectionIndex: 5, accent: "#ff1747", x: 10.0 },
-  { id: "L5", side: "left", z: -63, width: 9.0, depth: 15, height: 25, sectionIndex: 4, frontSectionIndex: 6, accent: "#ff2ecb", x: -9.7 },
-  { id: "R5", side: "right", z: -66, width: 9.3, depth: 16, height: 33, sectionIndex: 3, frontSectionIndex: 2, accent: "#8e5cff", x: 10.1 },
-];
-
-function VideoBuilding({
-  spec,
+function MainBillboard({
   activeId,
   onSelect,
 }: {
-  spec: BuildingSpec;
   activeId: string | null;
   onSelect: (section: Section) => void;
 }) {
-  const innerSection = SECTIONS[spec.sectionIndex % SECTIONS.length];
-  const frontSection = SECTIONS[spec.frontSectionIndex % SECTIONS.length];
-  const x = spec.x ?? (spec.side === "left" ? -10 : 10);
-  const innerX = spec.side === "left" ? x + spec.width / 2 + 0.03 : x - spec.width / 2 - 0.03;
-  const innerRotation = spec.side === "left" ? Math.PI / 2 : -Math.PI / 2;
-  const frontZ = spec.z + spec.depth / 2 + 0.03;
-
-  return (
-    <group>
-      <mesh position={[x, spec.height / 2, spec.z]}>
-        <boxGeometry args={[spec.width, spec.height, spec.depth]} />
-        <meshStandardMaterial color="#06070a" roughness={0.4} metalness={0.68} />
-      </mesh>
-
-      <HoloScreen
-        section={innerSection}
-        position={[innerX, spec.height * 0.5, spec.z]}
-        rotationY={innerRotation}
-        width={spec.depth - 0.45}
-        height={spec.height - 0.55}
-        onClick={() => onSelect(innerSection)}
-        active={activeId === innerSection.id}
-        showTitle={false}
-        showPrompt={false}
-        float={false}
-      />
-
-      <HoloScreen
-        section={frontSection}
-        position={[x, spec.height * 0.66, frontZ]}
-        width={spec.width - 0.35}
-        height={spec.height * 0.6}
-        onClick={() => onSelect(frontSection)}
-        active={activeId === frontSection.id}
-        showTitle={false}
-        showPrompt={false}
-        float={false}
-      />
-
-      <Text
-        position={[
-          spec.side === "left" ? innerX + 0.04 : innerX - 0.04,
-          spec.height - 0.42,
-          spec.z - spec.depth * 0.35,
-        ]}
-        rotation={[0, innerRotation, 0]}
-        fontSize={0.2}
-        letterSpacing={0.18}
-        color={spec.accent}
-        anchorX="center"
-      >
-        {spec.id} // LIVE MEDIA
-      </Text>
-
-      <pointLight position={[innerX, spec.height * 0.48, spec.z]} color={spec.accent} intensity={1.5} distance={13} />
-    </group>
-  );
-}
-
-function EndTower({ activeId, onSelect }: { activeId: string | null; onSelect: (section: Section) => void }) {
   const main = SECTIONS[1] ?? SECTIONS[0];
-  const upper = SECTIONS[3] ?? main;
   return (
     <group>
-      <mesh position={[0, 18, -82]}>
-        <boxGeometry args={[24, 36, 7]} />
-        <meshStandardMaterial color="#050609" roughness={0.38} metalness={0.74} />
+      <mesh position={[0, 4.8, -7.1]}>
+        <boxGeometry args={[14.9, 9.3, 0.62]} />
+        <meshStandardMaterial color="#050609" roughness={0.31} metalness={0.78} />
       </mesh>
       <HoloScreen
         section={main}
-        position={[0, 13.4, -78.45]}
-        width={22.4}
-        height={24.5}
+        position={[0, 4.65, -6.76]}
+        width={13.9}
+        height={6.75}
         onClick={() => onSelect(main)}
         active={activeId === main.id}
         showTitle={false}
         showPrompt={false}
         float={false}
       />
-      <HoloScreen
-        section={upper}
-        position={[0, 30.8, -78.4]}
-        width={17.3}
-        height={5.0}
-        onClick={() => onSelect(upper)}
-        active={activeId === upper.id}
-        showTitle={false}
-        showPrompt={false}
-        float={false}
-      />
-      <Text position={[0, 34.0, -78.2]} fontSize={0.4} letterSpacing={0.34} color="#8cff7b" anchorX="center">
-        GEN-02 // CITY SIGNAL
+      <Text
+        position={[-6.75, 8.55, -6.4]}
+        fontSize={0.2}
+        letterSpacing={0.16}
+        color="#f5f7ff"
+        anchorX="left"
+      >
+        JIOMETRY // PROJECT DISPLAY
+      </Text>
+      <Text
+        position={[6.7, 1.02, -6.38]}
+        fontSize={0.13}
+        letterSpacing={0.15}
+        color={BRAND_RED}
+        anchorX="right"
+      >
+        INTERACTIVE PORTFOLIO NODE
       </Text>
     </group>
   );
 }
 
-function RoofLights() {
+function DiagnosticsRoof() {
+  return (
+    <group position={[0.7, 10.2, -8.0]} rotation={[0, -0.03, 0]}>
+      <mesh>
+        <planeGeometry args={[11.6, 2.25]} />
+        <meshStandardMaterial color="#071109" emissive="#70ff6a" emissiveIntensity={0.12} roughness={0.34} />
+      </mesh>
+      <mesh position={[0, 1.08, 0.02]}>
+        <planeGeometry args={[11.6, 0.045]} />
+        <meshBasicMaterial color="#8dff76" toneMapped={false} />
+      </mesh>
+      <Text position={[-5.35, 0.55, 0.035]} fontSize={0.19} letterSpacing={0.12} color="#8dff76" anchorX="left">
+        SYSTEM // VIRTUAL ENVIRONMENT
+      </Text>
+      <Text position={[-5.35, 0.08, 0.035]} fontSize={0.095} letterSpacing={0.09} color="#dfffe5" anchorX="left">
+        GPU ONLINE   MEDIA ARRAY SYNCHRONIZED   LIVE NODE 02
+      </Text>
+      {Array.from({ length: 8 }).map((_, index) => (
+        <mesh key={index} position={[-4.7 + index * 1.35, -0.53, 0.03]}>
+          <planeGeometry args={[0.82, 0.045]} />
+          <meshBasicMaterial color={index % 3 === 0 ? "#a1ff72" : "#366d3e"} toneMapped={false} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+const PLAZA_BLOCKS: PlazaBlockSpec[] = [
+  {
+    id: "left-front",
+    position: [-9.3, -2.1],
+    size: [4.3, 10.8, 5.6],
+    accent: "#ff2bd6",
+    faces: [
+      { face: "front", sectionIndex: 4, y: 6.1, width: 3.75, height: 7.4 },
+      { face: "right", sectionIndex: 2, y: 3.1, width: 4.85, height: 3.25 },
+    ],
+  },
+  {
+    id: "right-front",
+    position: [9.6, -1.2],
+    size: [4.5, 12.8, 5.8],
+    accent: "#00e9ff",
+    faces: [
+      { face: "front", sectionIndex: 3, y: 7.0, width: 3.95, height: 8.7 },
+      { face: "left", sectionIndex: 6, y: 3.0, width: 4.95, height: 3.1 },
+    ],
+  },
+  {
+    id: "left-rear",
+    position: [-7.2, -10.8],
+    size: [4.4, 17.6, 4.7],
+    accent: "#7d4dff",
+    faces: [
+      { face: "front", sectionIndex: 2, y: 11.0, width: 3.85, height: 8.9 },
+      { face: "right", sectionIndex: 5, y: 5.0, width: 4.0, height: 5.0 },
+    ],
+  },
+  {
+    id: "right-rear",
+    position: [8.2, -11.6],
+    size: [4.8, 18.8, 4.9],
+    accent: "#ff3158",
+    faces: [
+      { face: "front", sectionIndex: 5, y: 11.6, width: 4.2, height: 9.7 },
+      { face: "left", sectionIndex: 1, y: 5.1, width: 4.15, height: 4.8 },
+    ],
+  },
+  {
+    id: "far-left",
+    position: [-13.2, -8.4],
+    size: [4.5, 15.5, 5.1],
+    accent: "#ffe54a",
+    faces: [{ face: "right", sectionIndex: 3, y: 9.0, width: 4.45, height: 10.7 }],
+  },
+  {
+    id: "far-right",
+    position: [13.3, -7.6],
+    size: [4.3, 14.8, 5.0],
+    accent: "#6bff91",
+    faces: [{ face: "left", sectionIndex: 4, y: 8.5, width: 4.35, height: 9.7 }],
+  },
+];
+
+function PlazaBlock({
+  spec,
+  activeId,
+  onSelect,
+}: {
+  spec: PlazaBlockSpec;
+  activeId: string | null;
+  onSelect: (section: Section) => void;
+}) {
+  const [x, z] = spec.position;
+  const [width, height, depth] = spec.size;
+
   return (
     <group>
-      {BUILDINGS.map((building, index) => {
-        const x = building.x ?? (building.side === "left" ? -10 : 10);
+      <mesh position={[x, height / 2, z]}>
+        <boxGeometry args={[width, height, depth]} />
+        <meshStandardMaterial color="#050609" roughness={0.42} metalness={0.68} />
+      </mesh>
+
+      <mesh position={[x, height + 0.02, z]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[width * 0.82, depth * 0.82]} />
+        <meshBasicMaterial color={spec.accent} transparent opacity={0.12} toneMapped={false} />
+      </mesh>
+
+      {spec.faces.map((media, index) => {
+        const section = SECTIONS[media.sectionIndex % SECTIONS.length];
+        const transform = faceTransform(media.face, x, z, width, depth, media.y);
         return (
-          <mesh key={building.id} position={[x, building.height + 2.0, building.z]} rotation={[0, 0, index % 2 ? -0.18 : 0.18]}>
-            <boxGeometry args={[0.035, 5.2, 0.035]} />
-            <meshBasicMaterial color={building.accent} transparent opacity={0.75} toneMapped={false} />
-          </mesh>
+          <HoloScreen
+            key={`${spec.id}-${media.face}-${index}`}
+            section={section}
+            position={transform.position}
+            rotationY={transform.rotationY}
+            width={media.width}
+            height={media.height}
+            onClick={() => onSelect(section)}
+            active={activeId === section.id}
+            showTitle={false}
+            showPrompt={false}
+            float={false}
+          />
         );
       })}
+
+      <Text
+        position={[x, height + 0.5, z + depth / 2 + 0.06]}
+        fontSize={0.15}
+        letterSpacing={0.16}
+        color={spec.accent}
+        anchorX="center"
+      >
+        {spec.id.toUpperCase()} // SIGNAL
+      </Text>
+      <pointLight position={[x, Math.min(height * 0.6, 8.5), z + 1]} color={spec.accent} intensity={0.75} distance={9} />
+    </group>
+  );
+}
+
+function faceTransform(
+  face: Face,
+  x: number,
+  z: number,
+  width: number,
+  depth: number,
+  y: number,
+): { position: [number, number, number]; rotationY: number } {
+  if (face === "left") {
+    return { position: [x - width / 2 - 0.04, y, z], rotationY: Math.PI / 2 };
+  }
+  if (face === "right") {
+    return { position: [x + width / 2 + 0.04, y, z], rotationY: -Math.PI / 2 };
+  }
+  return { position: [x, y, z + depth / 2 + 0.04], rotationY: 0 };
+}
+
+function LowerMedia({
+  activeId,
+  onSelect,
+}: {
+  activeId: string | null;
+  onSelect: (section: Section) => void;
+}) {
+  const items = [
+    { sectionIndex: 2, position: [-5.2, 2.0, -2.6] as [number, number, number], rotationY: 0.12, width: 2.7, height: 1.65 },
+    { sectionIndex: 5, position: [5.25, 1.9, -2.4] as [number, number, number], rotationY: -0.12, width: 2.8, height: 1.7 },
+    { sectionIndex: 6, position: [-4.0, 1.45, 2.0] as [number, number, number], rotationY: 0.2, width: 2.25, height: 1.25 },
+    { sectionIndex: 3, position: [4.1, 1.45, 1.6] as [number, number, number], rotationY: -0.2, width: 2.25, height: 1.25 },
+  ];
+
+  return (
+    <group>
+      {items.map((item, index) => {
+        const section = SECTIONS[item.sectionIndex % SECTIONS.length];
+        return (
+          <HoloScreen
+            key={`lower-${index}`}
+            section={section}
+            position={item.position}
+            rotationY={item.rotationY}
+            width={item.width}
+            height={item.height}
+            onClick={() => onSelect(section)}
+            active={activeId === section.id}
+            showTitle={false}
+            showPrompt={false}
+          />
+        );
+      })}
+    </group>
+  );
+}
+
+function NeonCeiling() {
+  const beams: Array<[number, number, number, number, string]> = [
+    [-10.8, 10.5, 2.8, 0.36, BRAND_RED],
+    [-4.8, 13.5, -0.6, -0.2, "#6c46ff"],
+    [4.5, 13.2, -1.0, 0.23, "#6c46ff"],
+    [11.2, 11.4, 1.8, -0.35, BRAND_RED],
+  ];
+  return (
+    <group>
+      {beams.map(([x, y, z, rotation, color], index) => (
+        <mesh key={index} position={[x, y, z]} rotation={[0, 0, rotation]}>
+          <boxGeometry args={[0.028, 7.8, 0.028]} />
+          <meshBasicMaterial color={color} transparent opacity={0.48} toneMapped={false} />
+        </mesh>
+      ))}
+      <Text position={[-11.6, 4.0, -4.7]} rotation={[0, 0.22, -Math.PI / 2]} fontSize={0.22} letterSpacing={0.3} color="#00e5ff">
+        デジタル・ワールド
+      </Text>
+      <Text position={[11.6, 4.2, -4.5]} rotation={[0, -0.22, Math.PI / 2]} fontSize={0.22} letterSpacing={0.3} color="#ff31d5">
+        VIRTUAL // PROJECTS
+      </Text>
     </group>
   );
 }
@@ -319,34 +431,35 @@ export function CityScene({
   onSelect: (section: Section | null) => void;
 }) {
   const isMobile = useIsMobile();
-  const buildings = useMemo(() => BUILDINGS, []);
 
   return (
     <Canvas
       shadows={false}
       dpr={Math.min(window.devicePixelRatio, isMobile ? 1.4 : 2.0)}
       gl={{ antialias: true, powerPreference: "high-performance", alpha: false }}
-      camera={{ position: [0, 3.0, 27], fov: isMobile ? 72 : 60, near: 0.1, far: 230 }}
+      camera={{ position: [0, 3.0, 15.8], fov: isMobile ? 70 : 58, near: 0.1, far: 120 }}
       onPointerMissed={() => onSelect(null)}
       style={{ position: "fixed", inset: 0 }}
     >
       <color attach="background" args={["#010102"]} />
-      <fog attach="fog" args={["#020103", 26, 118]} />
-      <ambientLight intensity={0.065} color="#ff1747" />
-      <hemisphereLight args={["#30143c", "#010102", 0.14]} />
-      <directionalLight position={[0, 20, 14]} intensity={0.18} color="#8f6cff" />
+      <fog attach="fog" args={["#020103", 17, 55]} />
+      <ambientLight intensity={0.075} color="#ff1747" />
+      <hemisphereLight args={["#39143f", "#010102", 0.15]} />
+      <directionalLight position={[2, 15, 8]} intensity={0.18} color="#8d74ff" />
 
-      <Ground isMobile={isMobile} />
-      {buildings.map((spec) => (
-        <VideoBuilding key={spec.id} spec={spec} activeId={activeId} onSelect={onSelect} />
+      <PlazaFloor isMobile={isMobile} />
+      <MainBillboard activeId={activeId} onSelect={onSelect} />
+      <DiagnosticsRoof />
+      {PLAZA_BLOCKS.map((spec) => (
+        <PlazaBlock key={spec.id} spec={spec} activeId={activeId} onSelect={onSelect} />
       ))}
-      <EndTower activeId={activeId} onSelect={onSelect} />
-      <RoofLights />
+      <LowerMedia activeId={activeId} onSelect={onSelect} />
+      <NeonCeiling />
       <Player isMobile={isMobile} />
 
       <EffectComposer multisampling={0} enableNormalPass={false}>
-        <Bloom intensity={isMobile ? 0.9 : 1.42} luminanceThreshold={0.12} luminanceSmoothing={0.85} mipmapBlur />
-        <Vignette eskil={false} offset={0.12} darkness={0.58} />
+        <Bloom intensity={isMobile ? 0.9 : 1.36} luminanceThreshold={0.13} luminanceSmoothing={0.84} mipmapBlur />
+        <Vignette eskil={false} offset={0.12} darkness={0.6} />
       </EffectComposer>
     </Canvas>
   );

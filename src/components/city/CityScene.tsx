@@ -8,13 +8,22 @@ import { Kitty } from "./Kitty";
 import { SECTIONS, BRAND_RED, type Section } from "./data";
 
 type ControlDetail = { code: string; down: boolean };
-type PanelSpec = {
+type VideoPanelSpec = {
+  sectionIndex: number;
   position: [number, number, number];
   rotationY?: number;
-  size: [number, number];
+  width: number;
+  height: number;
+};
+
+type UtilityPanelSpec = {
+  position: [number, number, number];
+  rotationY?: number;
+  width: number;
+  height: number;
   color: string;
-  label: string;
-  sub?: string;
+  title: string;
+  subtitle: string;
 };
 
 function useIsMobile() {
@@ -34,9 +43,7 @@ function useKeys() {
   useEffect(() => {
     const down = (event: KeyboardEvent) => {
       keys.current[event.code] = true;
-      if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(event.code)) {
-        event.preventDefault();
-      }
+      if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(event.code)) event.preventDefault();
     };
     const up = (event: KeyboardEvent) => {
       keys.current[event.code] = false;
@@ -57,71 +64,53 @@ function useKeys() {
   return keys;
 }
 
-function Player({
-  target,
-  isMobile,
-}: {
-  target: { pos: THREE.Vector3; look: THREE.Vector3 } | null;
-  isMobile: boolean;
-}) {
+function Player({ isMobile }: { isMobile: boolean }) {
   const { camera } = useThree();
   const root = useRef<THREE.Group>(null);
-  const pos = useRef(new THREE.Vector3(0, 0, 8.8));
+  const pos = useRef(new THREE.Vector3(0, 0, 10.5));
   const yaw = useRef(Math.PI);
   const velocityY = useRef(0);
-  const look = useRef(new THREE.Vector3(0, 1, 0));
+  const look = useRef(new THREE.Vector3(0, 1, -2));
   const keys = useKeys();
 
   useFrame((state, delta) => {
     const dt = Math.min(delta, 0.05);
-    const pressed = keys.current;
-    const forward =
-      (pressed.KeyW || pressed.ArrowUp ? 1 : 0) -
-      (pressed.KeyS || pressed.ArrowDown ? 1 : 0);
-    const turn =
-      (pressed.KeyA || pressed.ArrowLeft ? 1 : 0) -
-      (pressed.KeyD || pressed.ArrowRight ? 1 : 0);
-
-    yaw.current += turn * dt * 2.15;
-    const speed = (pressed.ShiftLeft || pressed.ShiftRight ? 8.2 : 5.1) * forward;
+    const k = keys.current;
+    const forward = (k.KeyW || k.ArrowUp ? 1 : 0) - (k.KeyS || k.ArrowDown ? 1 : 0);
+    const turn = (k.KeyA || k.ArrowLeft ? 1 : 0) - (k.KeyD || k.ArrowRight ? 1 : 0);
+    yaw.current += turn * dt * 2.05;
+    const speed = (k.ShiftLeft || k.ShiftRight ? 8.0 : 5.0) * forward;
     pos.current.x += Math.sin(yaw.current) * speed * dt;
     pos.current.z += Math.cos(yaw.current) * speed * dt;
 
-    if (pressed.Space && pos.current.y <= 0.001) velocityY.current = 4.5;
+    if (k.Space && pos.current.y <= 0.001) velocityY.current = 4.4;
     velocityY.current -= 13 * dt;
     pos.current.y = Math.max(0, pos.current.y + velocityY.current * dt);
     if (pos.current.y === 0) velocityY.current = 0;
 
-    pos.current.x = THREE.MathUtils.clamp(pos.current.x, -13.5, 13.5);
-    pos.current.z = THREE.MathUtils.clamp(pos.current.z, -7, 17);
+    pos.current.x = THREE.MathUtils.clamp(pos.current.x, -12.5, 12.5);
+    pos.current.z = THREE.MathUtils.clamp(pos.current.z, -2.5, 16.5);
 
     if (root.current) {
       root.current.position.copy(pos.current);
       root.current.rotation.y = yaw.current;
     }
 
-    const desired = new THREE.Vector3();
-    const desiredLook = new THREE.Vector3();
-    if (target) {
-      desired.copy(target.pos);
-      desiredLook.copy(target.look);
-    } else {
-      const pointerLean = state.pointer.x * (isMobile ? 0.05 : 0.11);
-      const cameraYaw = yaw.current + pointerLean;
-      const radius = isMobile ? 6.7 : 7.4;
-      desired.set(
-        pos.current.x - Math.sin(cameraYaw) * radius,
-        pos.current.y + (isMobile ? 2.85 : 3.0),
-        pos.current.z - Math.cos(cameraYaw) * radius,
-      );
-      desiredLook.set(
-        pos.current.x + Math.sin(yaw.current) * 3.7,
-        pos.current.y + 1.28,
-        pos.current.z + Math.cos(yaw.current) * 3.7,
-      );
-    }
+    const pointerYaw = state.pointer.x * (isMobile ? 0.03 : 0.09);
+    const camYaw = yaw.current + pointerYaw;
+    const radius = isMobile ? 6.4 : 7.1;
+    const desired = new THREE.Vector3(
+      pos.current.x - Math.sin(camYaw) * radius,
+      pos.current.y + (isMobile ? 2.7 : 2.9),
+      pos.current.z - Math.cos(camYaw) * radius,
+    );
+    const desiredLook = new THREE.Vector3(
+      pos.current.x + Math.sin(yaw.current) * 4.0,
+      pos.current.y + 1.15,
+      pos.current.z + Math.cos(yaw.current) * 4.0,
+    );
 
-    const t = Math.min(1, dt * 4.6);
+    const t = Math.min(1, dt * 4.7);
     camera.position.lerp(desired, t);
     look.current.lerp(desiredLook, t);
     camera.lookAt(look.current);
@@ -129,7 +118,7 @@ function Player({
 
   return (
     <group ref={root}>
-      <Kitty color="#ff073d" scale={1.08} />
+      <Kitty color="#ff073d" scale={1.03} />
     </group>
   );
 }
@@ -137,250 +126,183 @@ function Player({
 function Ground({ isMobile }: { isMobile: boolean }) {
   return (
     <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.045, 1]}>
-      <planeGeometry args={[72, 72]} />
+      <planeGeometry args={[80, 80]} />
       <MeshReflectorMaterial
-        blur={isMobile ? [72, 18] : [240, 70]}
+        blur={isMobile ? [70, 18] : [260, 82]}
         resolution={isMobile ? 256 : 768}
         mixBlur={1}
-        mixStrength={isMobile ? 18 : 34}
-        mirror={0.67}
-        roughness={0.28}
-        depthScale={1.15}
-        minDepthThreshold={0.18}
+        mixStrength={isMobile ? 20 : 38}
+        mirror={0.72}
+        roughness={0.24}
+        depthScale={1.2}
+        minDepthThreshold={0.16}
         maxDepthThreshold={1.2}
-        color="#050407"
-        metalness={0.92}
+        color="#040406"
+        metalness={0.94}
       />
     </mesh>
   );
 }
 
-function MainStage({
-  activeId,
-  onSelect,
-}: {
-  activeId: string | null;
-  onSelect: (section: Section) => void;
-}) {
+function MainScreen({ activeId, onSelect }: { activeId: string | null; onSelect: (section: Section) => void }) {
   const main = SECTIONS.find((section) => section.kind === "project") ?? SECTIONS[0];
   return (
     <group>
-      <mesh position={[0, 4.5, -7.65]}>
-        <boxGeometry args={[17.7, 10.1, 0.38]} />
-        <meshStandardMaterial color="#06070a" roughness={0.34} metalness={0.68} />
+      <mesh position={[0, 4.7, -7.8]}>
+        <boxGeometry args={[17.9, 10.4, 0.44]} />
+        <meshStandardMaterial color="#050608" roughness={0.32} metalness={0.74} />
       </mesh>
       <HoloScreen
         section={main}
-        position={[0, 4.75, -7.38]}
-        width={16.4}
-        height={7.0}
+        position={[0, 4.9, -7.5]}
+        width={16.8}
+        height={7.4}
         onClick={() => onSelect(main)}
         active={activeId === main.id}
+        showTitle
+        showPrompt
+        float={false}
       />
-      <Text
-        position={[0, 9.6, -7.08]}
-        fontSize={0.29}
-        letterSpacing={0.34}
-        color="#f1f7ff"
-        anchorX="center"
-        anchorY="middle"
-      >
-        VIRTUAL // PROJECT ARRAY
+      <Text position={[0, 9.75, -7.18]} fontSize={0.25} letterSpacing={0.32} color="#f4fbff" anchorX="center">
+        DIGITAL PROJECT ARRAY
       </Text>
     </group>
   );
 }
 
-const PANEL_SPECS: PanelSpec[] = [
-  { position: [-10.6, 5.3, -5.0], rotationY: 0.34, size: [4.6, 7.2], color: "#ff28d7", label: "NEURAL", sub: "EXPERIENCE" },
-  { position: [-6.7, 8.8, -8.5], rotationY: 0.12, size: [3.2, 5.0], color: "#785cff", label: "GEN-02", sub: "SYSTEM" },
-  { position: [9.7, 6.8, -5.7], rotationY: -0.33, size: [4.3, 6.5], color: "#00eaff", label: "VIRTUAL", sub: "SIGNAL" },
-  { position: [6.4, 9.4, -9.1], rotationY: -0.12, size: [4.5, 3.2], color: "#9aff76", label: "SYSTEM STATUS", sub: "ONLINE" },
-  { position: [-11.6, 2.15, 0.2], rotationY: 0.52, size: [3.8, 2.0], color: "#d9f7ff", label: "DREAM", sub: "ARCHIVE" },
-  { position: [11.4, 2.55, -0.2], rotationY: -0.5, size: [3.4, 3.1], color: "#ff315b", label: "LIVE", sub: "NODE" },
-  { position: [-3.9, 3.05, -7.1], size: [2.35, 1.5], color: "#ff223f", label: "DRIFT", sub: "1101" },
-  { position: [4.6, 3.2, -7.15], size: [2.5, 1.45], color: "#ffdc45", label: "SYNTH", sub: "WAVE" },
+const VIDEO_PANELS: VideoPanelSpec[] = [
+  { sectionIndex: 1, position: [-10.7, 6.2, -5.5], rotationY: 0.34, width: 4.6, height: 6.4 },
+  { sectionIndex: 2, position: [-7.0, 9.5, -8.7], rotationY: 0.15, width: 3.4, height: 4.8 },
+  { sectionIndex: 3, position: [10.5, 6.2, -5.3], rotationY: -0.32, width: 4.7, height: 6.0 },
+  { sectionIndex: 4, position: [7.2, 9.7, -8.9], rotationY: -0.14, width: 4.3, height: 3.0 },
+  { sectionIndex: 5, position: [-11.7, 2.15, -0.5], rotationY: 0.5, width: 3.8, height: 2.15 },
+  { sectionIndex: 6, position: [11.4, 2.55, -0.1], rotationY: -0.48, width: 3.5, height: 3.0 },
+  { sectionIndex: 2, position: [-5.0, 2.3, -4.2], rotationY: 0.12, width: 3.2, height: 1.75 },
+  { sectionIndex: 3, position: [5.2, 2.25, -4.0], rotationY: -0.12, width: 3.2, height: 1.8 },
+  { sectionIndex: 1, position: [-3.2, 7.9, -8.95], rotationY: 0.03, width: 2.3, height: 2.8 },
+  { sectionIndex: 4, position: [3.4, 8.1, -9.0], rotationY: -0.03, width: 2.4, height: 2.6 },
+  { sectionIndex: 5, position: [-12.0, 4.2, -2.8], rotationY: 0.42, width: 2.7, height: 3.3 },
+  { sectionIndex: 6, position: [12.1, 4.4, -2.6], rotationY: -0.42, width: 2.8, height: 3.4 },
 ];
 
-function NeonPanels() {
+const UTILITY_PANELS: UtilityPanelSpec[] = [
+  { position: [-8.2, 4.0, -2.8], rotationY: 0.28, width: 2.8, height: 4.5, color: "#00e8ff", title: "SIGNAL", subtitle: "NODE 021" },
+  { position: [8.4, 4.2, -2.8], rotationY: -0.28, width: 2.9, height: 4.8, color: "#ff2cd3", title: "NEURAL", subtitle: "GRID 119" },
+  { position: [-6.2, 3.0, -1.2], rotationY: 0.18, width: 2.1, height: 2.5, color: "#75ff9d", title: "ONLINE", subtitle: "SYS OK" },
+  { position: [6.4, 3.1, -1.0], rotationY: -0.18, width: 2.1, height: 2.6, color: "#ffe65c", title: "LIVE", subtitle: "SYNC" },
+];
+
+function VideoWall({ activeId, onSelect }: { activeId: string | null; onSelect: (section: Section) => void }) {
   return (
     <group>
-      {PANEL_SPECS.map((spec, index) => (
-        <StaticPanel key={`${spec.label}-${index}`} spec={spec} index={index} />
+      {VIDEO_PANELS.map((panel, index) => {
+        const section = SECTIONS[panel.sectionIndex % SECTIONS.length];
+        return (
+          <HoloScreen
+            key={`${section.id}-${index}`}
+            section={section}
+            position={panel.position}
+            rotationY={panel.rotationY}
+            width={panel.width}
+            height={panel.height}
+            onClick={() => onSelect(section)}
+            active={activeId === section.id}
+            showTitle={index % 3 === 0}
+            showPrompt={false}
+          />
+        );
+      })}
+      {UTILITY_PANELS.map((panel) => (
+        <UtilityPanel key={panel.title + panel.subtitle} {...panel} />
       ))}
-      <VerticalGlyphs position={[-8.0, 3.4, -3.0]} color="#00d7ff" />
-      <VerticalGlyphs position={[8.6, 4.4, -2.9]} color="#ff35da" mirrored />
     </group>
   );
 }
 
-function StaticPanel({ spec, index }: { spec: PanelSpec; index: number }) {
-  const [width, height] = spec.size;
+function UtilityPanel({ position, rotationY = 0, width, height, color, title, subtitle }: UtilityPanelSpec) {
   return (
-    <group position={spec.position} rotation={[0, spec.rotationY ?? 0, 0]}>
+    <group position={position} rotation={[0, rotationY, 0]}>
       <mesh>
         <planeGeometry args={[width, height]} />
-        <meshStandardMaterial
-          color="#05070a"
-          emissive={spec.color}
-          emissiveIntensity={0.06}
-          roughness={0.4}
-          metalness={0.5}
-        />
+        <meshStandardMaterial color="#040507" emissive={color} emissiveIntensity={0.08} metalness={0.5} roughness={0.38} />
       </mesh>
-      <mesh position={[0, height / 2, 0.012]}>
-        <planeGeometry args={[width, 0.045]} />
-        <meshBasicMaterial color={spec.color} toneMapped={false} />
+      <mesh position={[0, height / 2, 0.02]}>
+        <planeGeometry args={[width, 0.04]} />
+        <meshBasicMaterial color={color} toneMapped={false} />
       </mesh>
-      <mesh position={[-width / 2, 0, 0.012]}>
-        <planeGeometry args={[0.045, height]} />
-        <meshBasicMaterial color={spec.color} toneMapped={false} />
+      <mesh position={[-width / 2, 0, 0.02]}>
+        <planeGeometry args={[0.04, height]} />
+        <meshBasicMaterial color={color} toneMapped={false} />
       </mesh>
-      <Text
-        position={[-width / 2 + 0.18, height / 2 - 0.42, 0.03]}
-        fontSize={Math.min(0.36, width * 0.09)}
-        letterSpacing={0.14}
-        color={spec.color}
-        anchorX="left"
-        anchorY="middle"
-      >
-        {spec.label}
+      <Text position={[-width / 2 + 0.14, height / 2 - 0.34, 0.04]} fontSize={0.22} letterSpacing={0.12} color={color} anchorX="left">
+        {title}
       </Text>
-      <Text
-        position={[-width / 2 + 0.18, height / 2 - 0.82, 0.03]}
-        fontSize={0.15}
-        letterSpacing={0.12}
-        color="#d6e7ed"
-        anchorX="left"
-        anchorY="middle"
-      >
-        {spec.sub ?? "ONLINE"}
+      <Text position={[-width / 2 + 0.14, height / 2 - 0.68, 0.04]} fontSize={0.11} letterSpacing={0.1} color="#e7faff" anchorX="left">
+        {subtitle}
       </Text>
-      {Array.from({ length: 6 }).map((_, row) => (
-        <mesh key={row} position={[0.2, height / 2 - 1.35 - row * 0.42, 0.025]}>
-          <planeGeometry args={[width * (0.45 + ((index + row) % 4) * 0.11), 0.035]} />
-          <meshBasicMaterial color={row % 3 === 0 ? spec.color : "#8ba2aa"} transparent opacity={row % 3 === 0 ? 0.75 : 0.34} toneMapped={false} />
+      {Array.from({ length: 8 }).map((_, row) => (
+        <mesh key={row} position={[0, height / 2 - 1.05 - row * 0.32, 0.03]}>
+          <planeGeometry args={[width * (0.44 + ((row + title.length) % 4) * 0.11), 0.025]} />
+          <meshBasicMaterial color={row % 3 === 0 ? color : "#78909a"} transparent opacity={row % 3 === 0 ? 0.72 : 0.28} toneMapped={false} />
         </mesh>
       ))}
-      <pointLight color={spec.color} intensity={0.65} distance={4.5} />
+      <pointLight color={color} intensity={0.55} distance={4} />
     </group>
   );
 }
 
-function VerticalGlyphs({
-  position,
-  color,
-  mirrored = false,
-}: {
-  position: [number, number, number];
-  color: string;
-  mirrored?: boolean;
-}) {
-  return (
-    <group position={position} rotation={[0, mirrored ? -0.25 : 0.25, 0]}>
-      <Text
-        position={[0, 0, 0]}
-        rotation={[0, 0, -Math.PI / 2]}
-        fontSize={0.33}
-        letterSpacing={0.32}
-        color={color}
-        anchorX="center"
-        anchorY="middle"
-      >
-        デジタル・ワールド
-      </Text>
-    </group>
-  );
-}
-
-function Crowd() {
-  const crowd = useMemo(
-    () => [
-      { p: [-5.6, 0, 1.3] as [number, number, number], c: "#ff073d", s: 0.8, r: 0.2 },
-      { p: [-2.5, 0, -0.7] as [number, number, number], c: "#ff073d", s: 0.72, r: -0.15 },
-      { p: [2.35, 0, 0.15] as [number, number, number], c: "#ff073d", s: 0.78, r: 0.12 },
-      { p: [5.8, 0, 1.0] as [number, number, number], c: "#006dff", s: 0.86, r: -0.18 },
-      { p: [8.7, 0, -0.9] as [number, number, number], c: "#006dff", s: 0.66, r: 0.25 },
-      { p: [-8.25, 0, -1.5] as [number, number, number], c: "#ff7a18", s: 0.64, r: -0.25 },
-      { p: [0.0, 0, -2.15] as [number, number, number], c: "#ff073d", s: 0.62, r: 0 },
-    ],
-    [],
-  );
-
-  return (
-    <group>
-      {crowd.map((npc, index) => (
-        <group key={index} position={npc.p} rotation={[0, npc.r, 0]}>
-          <Kitty color={npc.c} scale={npc.s} />
-        </group>
-      ))}
-    </group>
-  );
-}
-
-function CeilingLasers() {
+function LightArchitecture() {
   return (
     <group>
       {[
-        [-10, 11, 2, 0.55],
-        [-4, 13, -1, -0.24],
-        [5, 12, 0, 0.25],
-        [10, 10, 1, -0.48],
-      ].map(([x, y, z, r], index) => (
-        <mesh key={index} position={[x, y, z]} rotation={[0, 0, r]}>
-          <boxGeometry args={[0.025, 7.5, 0.025]} />
-          <meshBasicMaterial color={index % 2 ? "#5c34ff" : BRAND_RED} transparent opacity={0.45} toneMapped={false} />
+        [-11, 10, 2, 0.52, BRAND_RED],
+        [-5, 12, -1, -0.24, "#5b3dff"],
+        [5, 12, 0, 0.24, "#5b3dff"],
+        [11, 10, 1, -0.5, BRAND_RED],
+      ].map(([x, y, z, r, color], index) => (
+        <mesh key={index} position={[x as number, y as number, z as number]} rotation={[0, 0, r as number]}>
+          <boxGeometry args={[0.025, 8.5, 0.025]} />
+          <meshBasicMaterial color={color as string} transparent opacity={0.52} toneMapped={false} />
         </mesh>
       ))}
+      <Text position={[-12.8, 5.0, -3.6]} rotation={[0, 0.3, -Math.PI / 2]} fontSize={0.25} letterSpacing={0.3} color="#00dfff">
+        デジタル・ワールド
+      </Text>
+      <Text position={[12.8, 5.3, -3.5]} rotation={[0, -0.3, Math.PI / 2]} fontSize={0.25} letterSpacing={0.3} color="#ff31d5">
+        PROJECT // ARRAY
+      </Text>
     </group>
   );
 }
 
-export function CityScene({
-  activeId,
-  onSelect,
-}: {
-  activeId: string | null;
-  onSelect: (section: Section | null) => void;
-}) {
+export function CityScene({ activeId, onSelect }: { activeId: string | null; onSelect: (section: Section | null) => void }) {
   const isMobile = useIsMobile();
-  const target = useMemo(() => {
-    if (!activeId) return null;
-    const section = SECTIONS.find((item) => item.id === activeId);
-    if (!section) return null;
-    return {
-      pos: new THREE.Vector3(isMobile ? 5.8 : 6.8, isMobile ? 4.1 : 4.6, 2.8),
-      look: new THREE.Vector3(0, 4.5, -7.2),
-    };
-  }, [activeId, isMobile]);
 
   return (
     <Canvas
       shadows={false}
-      dpr={Math.min(window.devicePixelRatio, isMobile ? 1.5 : 2.15)}
+      dpr={Math.min(window.devicePixelRatio, isMobile ? 1.5 : 2.1)}
       gl={{ antialias: true, powerPreference: "high-performance", alpha: false }}
-      camera={{ position: [0, 3.2, 15.2], fov: isMobile ? 70 : 59, near: 0.1, far: 150 }}
+      camera={{ position: [0, 3.0, 16.5], fov: isMobile ? 70 : 58, near: 0.1, far: 150 }}
       onPointerMissed={() => onSelect(null)}
       style={{ position: "fixed", inset: 0 }}
     >
       <color attach="background" args={["#010102"]} />
-      <fog attach="fog" args={["#030105", 18, 58]} />
-
-      <ambientLight intensity={0.09} color="#ff1747" />
-      <hemisphereLight args={["#4b1747", "#010102", 0.18]} />
-      <directionalLight position={[4, 15, 8]} intensity={0.22} color="#9d73ff" />
-      <directionalLight position={[-8, 9, -1]} intensity={0.18} color="#ff1747" />
+      <fog attach="fog" args={["#030105", 17, 58]} />
+      <ambientLight intensity={0.08} color="#ff1747" />
+      <hemisphereLight args={["#42163f", "#010102", 0.16]} />
+      <directionalLight position={[4, 15, 8]} intensity={0.2} color="#8d74ff" />
+      <directionalLight position={[-8, 9, -1]} intensity={0.16} color="#ff1747" />
 
       <Ground isMobile={isMobile} />
-      <MainStage activeId={activeId} onSelect={onSelect} />
-      <NeonPanels />
-      <Crowd />
-      <CeilingLasers />
-      <Player target={target} isMobile={isMobile} />
+      <MainScreen activeId={activeId} onSelect={onSelect} />
+      <VideoWall activeId={activeId} onSelect={onSelect} />
+      <LightArchitecture />
+      <Player isMobile={isMobile} />
 
       <EffectComposer multisampling={0} enableNormalPass={false}>
-        <Bloom intensity={isMobile ? 0.95 : 1.35} luminanceThreshold={0.16} luminanceSmoothing={0.82} mipmapBlur />
-        <Vignette eskil={false} offset={0.13} darkness={0.63} />
+        <Bloom intensity={isMobile ? 0.95 : 1.4} luminanceThreshold={0.14} luminanceSmoothing={0.84} mipmapBlur />
+        <Vignette eskil={false} offset={0.13} darkness={0.64} />
       </EffectComposer>
     </Canvas>
   );

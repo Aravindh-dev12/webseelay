@@ -12,6 +12,9 @@ export function HoloScreen({
   height,
   onClick,
   active,
+  showTitle = true,
+  showPrompt = true,
+  float = true,
 }: {
   section: Section;
   position: [number, number, number];
@@ -20,6 +23,9 @@ export function HoloScreen({
   height: number;
   onClick: () => void;
   active: boolean;
+  showTitle?: boolean;
+  showPrompt?: boolean;
+  float?: boolean;
 }) {
   const [videoOk, setVideoOk] = useState(false);
   const accent = ACCENTS[section.accent];
@@ -35,6 +41,7 @@ export function HoloScreen({
     element.playsInline = true;
     element.crossOrigin = "anonymous";
     element.autoplay = true;
+    element.preload = "auto";
     return element;
   }, [section.videoUrl]);
 
@@ -52,6 +59,8 @@ export function HoloScreen({
       video.removeEventListener("canplay", canPlay);
       video.removeEventListener("error", failed);
       video.pause();
+      video.removeAttribute("src");
+      video.load();
     };
   }, [video]);
 
@@ -61,8 +70,11 @@ export function HoloScreen({
     value.colorSpace = THREE.SRGBColorSpace;
     value.minFilter = THREE.LinearFilter;
     value.magFilter = THREE.LinearFilter;
+    value.generateMipmaps = false;
     return value;
   }, [video]);
+
+  useEffect(() => () => texture?.dispose(), [texture]);
 
   const uniforms = useMemo(
     () => ({
@@ -74,16 +86,16 @@ export function HoloScreen({
 
   useFrame((state) => {
     if (shaderRef.current) shaderRef.current.uniforms.uTime.value = state.clock.elapsedTime;
-    if (groupRef.current) {
-      groupRef.current.rotation.z = Math.sin(state.clock.elapsedTime * 0.45 + position[0]) * 0.0015;
+    if (groupRef.current && float) {
+      groupRef.current.position.y = position[1] + Math.sin(state.clock.elapsedTime * 0.48 + position[0]) * 0.035;
     }
   });
 
   return (
     <group ref={groupRef} position={position} rotation={[0, rotationY, 0]}>
-      <mesh position={[0, 0, -0.14]}>
-        <boxGeometry args={[width + 0.55, height + 0.55, 0.22]} />
-        <meshStandardMaterial color="#050508" metalness={0.72} roughness={0.26} />
+      <mesh position={[0, 0, -0.12]}>
+        <boxGeometry args={[width + 0.28, height + 0.28, 0.18]} />
+        <meshStandardMaterial color="#040507" metalness={0.74} roughness={0.24} />
       </mesh>
 
       <mesh
@@ -102,49 +114,49 @@ export function HoloScreen({
         {videoOk && texture ? (
           <meshBasicMaterial map={texture} toneMapped={false} />
         ) : (
-          <shaderMaterial
-            ref={shaderRef}
-            uniforms={uniforms}
-            vertexShader={screenVert}
-            fragmentShader={screenFrag}
-          />
+          <shaderMaterial ref={shaderRef} uniforms={uniforms} vertexShader={screenVert} fragmentShader={screenFrag} />
         )}
       </mesh>
 
-      <mesh position={[0, height / 2 + 0.18, 0.08]}>
-        <planeGeometry args={[width, 0.055]} />
+      <mesh position={[0, height / 2 + 0.09, 0.06]}>
+        <planeGeometry args={[width, 0.035]} />
         <meshBasicMaterial color={accent} toneMapped={false} />
       </mesh>
-      <mesh position={[0, -height / 2 - 0.18, 0.08]}>
-        <planeGeometry args={[width, 0.055]} />
+      <mesh position={[0, -height / 2 - 0.09, 0.06]}>
+        <planeGeometry args={[width, 0.035]} />
         <meshBasicMaterial color={accent} toneMapped={false} />
       </mesh>
 
-      <Text
-        position={[-width / 2 + 0.18, height / 2 + 0.44, 0.06]}
-        fontSize={0.28}
-        letterSpacing={0.13}
-        color={accent}
-        anchorX="left"
-        anchorY="middle"
-      >
-        {section.title}
-      </Text>
-      <Text
-        position={[width / 2 - 0.12, -height / 2 - 0.43, 0.06]}
-        fontSize={0.16}
-        letterSpacing={0.1}
-        color="#d6f9ff"
-        anchorX="right"
-        anchorY="middle"
-      >
-        {active ? "NODE OPEN" : "INTERACT"}
-      </Text>
+      {showTitle && (
+        <Text
+          position={[-width / 2 + 0.14, height / 2 + 0.29, 0.06]}
+          fontSize={Math.min(0.24, height * 0.055)}
+          letterSpacing={0.12}
+          color={accent}
+          anchorX="left"
+          anchorY="middle"
+        >
+          {section.title}
+        </Text>
+      )}
+
+      {showPrompt && (
+        <Text
+          position={[width / 2 - 0.08, -height / 2 - 0.28, 0.06]}
+          fontSize={Math.min(0.14, height * 0.04)}
+          letterSpacing={0.08}
+          color="#dff8ff"
+          anchorX="right"
+          anchorY="middle"
+        >
+          {active ? "NODE OPEN" : "INTERACT"}
+        </Text>
+      )}
 
       {active && (
-        <mesh position={[0, 0, -0.2]}>
-          <planeGeometry args={[width + 0.9, height + 0.9]} />
-          <meshBasicMaterial color={accent} transparent opacity={0.055} toneMapped={false} />
+        <mesh position={[0, 0, -0.19]}>
+          <planeGeometry args={[width + 0.7, height + 0.7]} />
+          <meshBasicMaterial color={accent} transparent opacity={0.05} toneMapped={false} />
         </mesh>
       )}
     </group>
